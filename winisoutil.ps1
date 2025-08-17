@@ -2,36 +2,9 @@
     [string]$IsoPath = ""
 )
 
-# Script'in herhangi bir yerinde sonlandırıcı bir hata olursa bu blok çalışır.
-# Bu, mount edilmiş imajın "kirli" kalmasını engeller.
-trap {
-    Write-ColorText "Beklenmedik bir hata oluştu! Güvenli çıkış yapılıyor..." $Red
-    Write-ColorText "Hata: $($_.Exception.Message)" $Yellow
-
-    Cleanup
-    exit 1
-}
-
-# --- GLOBAL DEĞİŞKENLER VE RENKLER ---
-$Red = "Red"
-$Green = "Green"
-$Yellow = "Yellow"
-$Cyan = "Cyan"
-$White = "White"
-
-# Kullanıcı tarafından yapılan seçimleri oturum boyunca saklamak için genel bir yapılandırma nesnesi.
-$global:ScriptConfig = @{
-    RemovedApps            = @()
-    RegistryTweaks         = @()
-    EnabledFeatures        = @()
-    ComponentServiceTweaks = @()
-}
-
-# Scriptin çalışma modunu belirleyen ve tüm fonksiyonlardan erişilebilen değişken
-$script:runMode = 'MANUAL' # Varsayılan mod
-
-
 # --- YARDIMCI FONKSİYONLAR ---
+# Scriptin herhangi bir yerinde kullanılmadan önce tüm fonksiyonların tanımlanması,
+# özellikle "irm | iex" ile çalıştırma sırasında oluşabilecek hataları engeller.
 
 function Write-ColorText {
     param([string]$Text, [string]$Color = "White")
@@ -41,7 +14,7 @@ function Write-ColorText {
 function Show-Banner {
     Clear-Host
     Write-ColorText "================================================================" $Cyan
-    Write-ColorText "    		   Windows 11 ISO Ozellestirme Araci v10.0           " $Cyan
+    Write-ColorText "    Windows 11 ISO Ozellestirme Araci v10.1 (iex Uyumlu)        " $Cyan
     Write-ColorText "================================================================" $Cyan
     Write-Host ""
 }
@@ -112,7 +85,6 @@ function Get-UserChoice {
 }
 
 function Get-IsoTool {
-    # 1. Öncelik: Sistemde kurulu oscdimg.exe'yi ara
     $adkPaths = @(
         "C:\Program Files (x86)\Windows Kits\11\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg",
         "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg"
@@ -125,7 +97,6 @@ function Get-IsoTool {
         }
     }
 
-    # 2. Öncelik: Alternatif aracı indir
     Write-ColorText "Sistemde oscdimg.exe bulunamadi. Alternatif arac (mkisofs) indiriliyor..." $Yellow
     $toolsDir = Join-Path $env:TEMP "WinIsoTools"
     $mkisofsPath = Join-Path $toolsDir "mkisofs.exe"
@@ -137,7 +108,6 @@ function Get-IsoTool {
 
     try {
         New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null
-        # Kendi GitHub reponuzdaki 'tools' klasörünün URL'sini buraya girin
         $repoUrl = "https://raw.githubusercontent.com/yusufklncc/winisoutil/main/tools"
         
         Write-ColorText "mkisofs.exe indiriliyor..." $Cyan
@@ -157,6 +127,31 @@ function Get-IsoTool {
         Write-ColorText "Lutfen internet baglantinizi kontrol edin veya Windows ADK'yi yukleyin." $Yellow
         return $null
     }
+}
+
+# --- GLOBAL DEĞİŞKENLER VE HATA YÖNETİMİ ---
+
+$Red = "Red"
+$Green = "Green"
+$Yellow = "Yellow"
+$Cyan = "Cyan"
+$White = "White"
+
+$global:ScriptConfig = @{
+    RemovedApps            = @()
+    RegistryTweaks         = @()
+    EnabledFeatures        = @()
+    ComponentServiceTweaks = @()
+}
+
+$script:runMode = 'MANUAL'
+
+trap {
+    Write-ColorText "Beklenmedik bir hata oluştu! Güvenli çıkış yapılıyor..." $Red
+    Write-ColorText "Hata: $($_.Exception.Message)" $Yellow
+
+    Cleanup
+    exit 1
 }
 
 # --- İÇE/DIŞA AKTARMA VE OTOMASYON FONKSİYONLARI ---
