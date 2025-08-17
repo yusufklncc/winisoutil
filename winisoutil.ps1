@@ -261,12 +261,23 @@ function Start-IsoCustomizer {
         try {
             $mountResult = Mount-DiskImage -ImagePath $IsoPath -PassThru
             $driveLetter = ($mountResult | Get-Volume).DriveLetter
+
+            # DÜZELTME: Mount işleminin başarılı olup olmadığını kontrol et
+            if ([string]::IsNullOrWhiteSpace($driveLetter)) {
+                Write-ColorText "HATA: ISO dosyasi mount edilemedi. Sanal surucu harfi alinamadi." $Red
+                Write-ColorText "Bu durum, script'i Windows Sandbox gibi kisitli bir ortamda calistirmaktan kaynaklanabilir." $Yellow
+                throw "ISO mount islemi basarisiz oldu."
+            }
+
             Copy-Item -Path "$($driveLetter):\*" -Destination "C:\temp_iso\" -Recurse -Force
             Write-ColorText "install.wim dosyasinin salt okunur ozelligi kaldiriliyor..." $Yellow
             Set-ItemProperty -Path "C:\temp_iso\sources\install.wim" -Name IsReadOnly -Value $false
             Write-ColorText "ISO dosyalari kopyalandi!" $Green
         } catch {
-            Write-ColorText "ISO dosyaları kopyalanırken hata oluştu: $_" $Red
+            # Hata zaten yukarıda açıklandı, burada tekrar genel bir mesaj verilebilir.
+            if ($_.Exception.Message -notlike "*ISO mount islemi basarisiz oldu*") {
+                 Write-ColorText "ISO dosyaları kopyalanırken hata oluştu: $($_.Exception.Message)" $Red
+            }
             throw "ISO kopyalama başarısız."
         } finally {
             if ($mountResult) { Dismount-DiskImage -ImagePath $IsoPath }
