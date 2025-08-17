@@ -10,7 +10,7 @@ function Write-ColorText {
 function Show-Banner {
     Clear-Host
     Write-ColorText "================================================================" $Cyan
-    Write-ColorText "    Windows 11 ISO Ozellestirme Araci v10.2 (Kararli Surum)     " $Cyan
+    Write-ColorText "                 Windows 11 ISO Ozellestirme Araci              " $Cyan
     Write-ColorText "================================================================" $Cyan
     Write-Host ""
 }
