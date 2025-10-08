@@ -34,12 +34,10 @@ This tool features both an interactive menu that lets you make step-by-step sele
 
 ## 🚀 Usage
 
-1.  Clone this repository or download the files as a ZIP.
-2.  Ensure all files (`Win11-ISO-Customizer.ps1`, `languages.ps1`, `tweak-definitions.ps1`) are in the same folder.
-3.  Right-click on `Win11-ISO-Customizer.ps1` and select **"Run with PowerShell"**. The script requires administrator privileges.
-4.  When the script starts, you will first be prompted to select a language.
-5.  Next, a file selection window will open for you to choose the Windows 11 ISO file you want to edit.
-6.  After selecting the ISO, you can proceed by choosing the desired operations from the menu.
+1.  ...
+2.  When the script starts, you will first be prompted to select a language.
+3.  Next, a file selection window will open for you to choose the Windows 11 ISO file you want to edit.
+4.  After selecting the ISO, you can proceed by choosing the desired operations from the menu.
 
 ### Usage with Parameters
 
@@ -51,8 +49,11 @@ You can also run the script from the command line by specifying an ISO path. Thi
 
 ## 🛠️ Configuration Files
 
-- **`languages.ps1`**: Contains all the text used in the interface in both Turkish and English. You can edit this file to add a new language.
-- **`tweak-definitions.ps1`**: Contains all the tweaks listed in the "Registry Settings" menu. You can edit this file to add a new registry tweak or modify an existing one.
+- **`src\languages.ps1`**: Contains all the text used in the interface in both Turkish and English. You can edit this file to add a new language.
+- **`src\tweaks.ps1`**: Contains all the tweaks listed in the "Registry" menu. You can edit this file to add a new registry tweak or modify an existing one.
+- **`src\components.ps1`**: Contains all the components listed in the "Components and Services" menu. You can edit this file to add a new components, services or delete an existing one.
+- **`src\features.ps1`**: Contains all the features listed in the "Windows Features" menu. You can edit this file to add a new features or delete an existing one.
+- **`src\app-exclusion-list.ps1`**: Contains all the excluded apps in the "Remove Windows Apps" menu. You can edit this file to add a new apps for excluding them from listing or remove for list them again.
 
 ## 🤝 Contributing
 
