@@ -17,7 +17,7 @@ This tool features both an interactive menu that lets you make step-by-step sele
 - **Multi-Language Interface**: Support for Turkish and English.
 - **Interactive and Automatic Modes**:
   - **Manual Mode**: Choose step-by-step which components to remove or which settings to apply.
-  - **Automatic Mode**: Save your settings to a `.json` file and apply the same configuration to other ISOs with a single command.
+  - **Automatic Mode**: Save your settings to a `.json` file and apply the same configuration to other ISOs.
 - **ISO Cleanup**:
   - Save space by removing unwanted Windows editions (e.g., Home, Pro, SE) from the ISO.
   - Clean up unnecessary Windows applications (Bloatware) before installation.

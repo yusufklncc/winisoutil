@@ -12,14 +12,12 @@ $allTweaks = @(
         ID = 'WU_NotifyDownload'; 
         Description_tr = "Windows Update: Indirmeden once bildir"; 
         Description_en = "Windows Update: Notify before downloading";
-        Description_ja = "Windows Update: ダウンロード前に通知する";
         Action = "WU_Handler" 
     },
     [PSCustomObject]@{ 
         ID = 'WU_NotifyInstall'; 
         Description_tr = "Windows Update: Otomatik indir, yuklemeden once bildir"; 
         Description_en = "Windows Update: Download automatically, notify before installing";
-        Description_ja = "Windows Update: 自動的にダウンロードし、インストール前に通知する";
         Action = "WU_Handler" 
     },
     # --- Arayüz ve Kullanıcı Deneyimi Ayarları ---
@@ -27,7 +25,6 @@ $allTweaks = @(
         ID = 'AddDesktopIcons'; 
         Description_tr = "Masaustune temel simgeleri ekle (Bu Bilgisayar, Geri Donusum Kutusu ve Kullanici Klasoru)"; 
         Description_en = "Add basic icons to Desktop (This PC, Recycle Bin, and User Folder)"; 
-        Description_ja = "デスクトップに基本的なアイコンを追加（このPC、ごみ箱、ユーザーフォルダー）";
         Action = "InlineScript"; 
         Code = @"
 try {
@@ -44,7 +41,6 @@ catch {}
         ID = 'ConfigureTaskbar'; 
         Description_tr = "Gorev Cubugu'nu yapilandir (Sola hizala, Gorev Gorunumu ve Widget simgelerini gizle ve Sağ Tık menüsüne Gorevi Sonlandir ekle)"; 
         Description_en = "Configure Taskbar (Align left, hide Task View/Widgets icons, and add End Task to context menu)"; 
-        Description_ja = "タスクバーを構成（左揃え、タスクビュー/ウィジェットアイコンを非表示、コンテキストメニューにタスクの終了を追加）";
         Action = "InlineScript"; 
         Code = @"
 try {
@@ -62,7 +58,6 @@ catch {}
         ID = 'ConfigureFileExplorer'; 
         Description_tr = "Dosya Gezgini'ni yapilandir (Bu Bilgisayar ile baslat, Kompakt Gorunum, Detayli Kopyalama Diyalogu ve Dosya Uzantilarini etkinlestir )"; 
         Description_en = "Configure File Explorer (Start with This PC, Compact View, Detailed Copy Dialog, and show extensions)"; 
-        Description_ja = "ファイルエクスプローラーを構成（このPCで開始、コンパクトビュー、詳細なコピーダイアログ、拡張子の表示を有効化）";
         Action = "InlineScript"; 
         Code = @"
 try {
@@ -80,7 +75,6 @@ catch {}
         ID = 'ConfigureStartMenu'; 
         Description_tr = "Baslat Menusu'nu yapilandir (Onerilenleri gizle, Bing aramasini kapat)"; 
         Description_en = "Configure Start Menu (Hide recommendations, disable Bing search)"; 
-        Description_ja = "スタートメニューを構成（おすすめを非表示、Bing検索を無効化）";
         Action = "InlineScript"; 
         Code = @"
 try {
@@ -101,7 +95,6 @@ catch {}
         ID = 'DisablePrivacyAndTelemetry'; 
         Description_tr = "Gizliligi ihlal eden telemetri, veri toplama ve tanima servislerini kapat"; 
         Description_en = "Disable privacy-invading telemetry, data collection, and recognition services"; 
-        Description_ja = "プライバシーを侵害するテレメトリ、データ収集、認識サービスを無効にする";
         Action = "InlineScript"; 
         Code = @"
 try {
@@ -130,7 +123,6 @@ catch {}
         ID = 'DisableAdsAndSuggestions'; 
         Description_tr = "Windows genelinde onerilen uygulamalar, reklam, ipucu ve onerileri devre disi birak"; 
         Description_en = "Disable suggested apps, ads, tips, and suggestions across Windows"; 
-        Description_ja = "Windows全体でのおすすめアプリ、広告、ヒント、提案を無効にする";
         Action = "InlineScript"; 
         Code = @"
 try {
@@ -151,7 +143,6 @@ catch {}
         ID = 'DisableSpotlight'; 
         Description_tr = "Windows Spotlight duvar kagıdı ve ozelliklerini devre disi birak"; 
         Description_en = "Disable Windows Spotlight wallpaper and features"; 
-        Description_ja = "Windowsスポットライトの壁紙と機能を無効にする";
         Action = "InlineScript"; 
         Code = @"
 try {
@@ -167,7 +158,6 @@ catch {}
         ID = 'DisableWindowsAIFeatures'; 
         Description_tr = "Windows Copilot, Recall ve diger AI ozelliklerini devre disi birak"; 
         Description_en = "Disable Windows Copilot, Recall, and other AI features"; 
-        Description_ja = "Windows Copilot、Recall、その他のAI機能を無効にする";
         Action = "InlineScript"; 
         Code = @"
 try {
@@ -189,7 +179,6 @@ catch {}
         ID = 'DisableEdgeAIFeatures'; 
         Description_tr = "Microsoft Edge'deki Copilot, Kenar Cubugu ve diger AI ozelliklerini kapat"; 
         Description_en = "Disable Copilot, Sidebar, and other AI features in Microsoft Edge"; 
-        Description_ja = "Microsoft EdgeのCopilot、サイドバー、その他のAI機能を無効にする";
         Action = "InlineScript"; 
         Code = @"
 try {
@@ -208,7 +197,6 @@ catch {}
         ID = 'DisableEdgeContentFeatures'; 
         Description_tr = "Edge'deki alisveris asistani, MSN haberleri ve diger icerik ozelliklerini kapat"; 
         Description_en = "Disable shopping assistant, MSN news, and other content features in Edge"; 
-        Description_ja = "Edgeのショッピングアシスタント、MSNニュース、その他のコンテンツ機能を無効にする";
         Action = "InlineScript"; 
         Code = @"
 try {
@@ -226,7 +214,6 @@ catch {}
         ID = 'DisableOemApps'; 
         Description_tr = "Hazir kurulu OEM uygulamalarini ve onerilerini engelle"; 
         Description_en = "Block pre-installed OEM apps and suggestions"; 
-        Description_ja = "プリインストールされたOEMアプリと提案をブロックする";
         Action = "InlineScript"; 
         Code = @"
 try {

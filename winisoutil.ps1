@@ -1111,7 +1111,6 @@ $langChoice = Read-Host "Seçiminiz / Your choice"
 switch ($langChoice) {
     "1" { $global:currentLanguage = 'tr' }
     "2" { $global:currentLanguage = 'en' }
-    "3" { $global:currentLanguage = 'ja' }
     default { 
         Write-Host "Invalid selection, defaulting to English." -ForegroundColor Yellow
         $global:currentLanguage = 'en' 
