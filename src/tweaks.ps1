@@ -55,6 +55,13 @@ catch {}
 "@
     },
     [PSCustomObject]@{ 
+        ID = 'HideSearchIcon';
+        Description_tr = "Gorev cubugunda Arama simgesini gizle"; 
+        Description_en = "Hide the Search icon on the taskbar";
+        Action = "SetupScript"; 
+        Code = "try { Set-ItemProperty -Path 'Registry::HKCU\Software\Microsoft\Windows\CurrentVersion\Search' -Name 'SearchboxTaskbarMode' -Value 0 -Type DWord -Force } catch {}"
+    },
+    [PSCustomObject]@{ 
         ID = 'ConfigureFileExplorer'; 
         Description_tr = "Dosya Gezgini'ni yapilandir (Bu Bilgisayar ile baslat, Kompakt Gorunum, Detayli Kopyalama Diyalogu ve Dosya Uzantilarini etkinlestir )"; 
         Description_en = "Configure File Explorer (Start with This PC, Compact View, Detailed Copy Dialog, and show extensions)"; 

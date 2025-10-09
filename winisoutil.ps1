@@ -1104,7 +1104,6 @@ Write-ColorText "===============================================================
 Write-Host ""
 Write-ColorText "1. Türkçe" $White
 Write-ColorText "2. English" $White
-Write-ColorText "3. 日本語" $White
 Write-Host ""
 $langChoice = Read-Host "Seçiminiz / Your choice"
 
