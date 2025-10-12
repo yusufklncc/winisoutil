@@ -9,8 +9,8 @@ if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
         $scriptUrl = "https://raw.githubusercontent.com/yusufklncc/winisoutil/refs/heads/main/install.ps1"
         $arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"& {irm '$scriptUrl' | iex}`""
         
-        # Start the new process as Administrator ("RunAs").
-        Start-Process powershell.exe -ArgumentList $arguments -Verb RunAs -ErrorAction Stop
+        # Start the new process as Administrator ("RunAs") in Windows Terminal.
+        Start-Process wt.exe -ArgumentList $arguments -Verb RunAs -ErrorAction Stop
         
         # Exit the current, non-elevated script.
         exit
@@ -74,4 +74,5 @@ try {
 }
 
 Read-Host "Press Enter to close this window..."
+
 
