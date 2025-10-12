@@ -1,12 +1,16 @@
-﻿param(
-    # Optional parameter to specify the ISO path directly when running the script.
-    [string]$IsoPath = ""
-)
+﻿# WinIsoUtil - A PowerShell script to customize Windows installation ISOs.
+# This script provides a user-friendly interface for modifying Windows ISO files.
+# It supports various customization options, including feature selection, component tweaks, and application exclusions.
+# The script is designed to be modular and extensible, allowing for future enhancements and additional features.
+# Author: Yusuf İhsan KILINÇ
+# GitHub: https://github.com/yusufklncc/winisoutil
+# License: MIT License
+# Note: This script requires administrative privileges to run.
+# Usage of this script is at your own risk. Always back up important data before making system modifications.
 
 # This trap block runs if a terminating error occurs anywhere in the script.
 # It ensures a safe cleanup to prevent leaving a mounted image behind.
 trap {
-    # If the language file hasn't been loaded yet, $langStrings will be null.
     if ($null -ne $langStrings) {
         Write-ColorText $langStrings.trapErrorUnexpected $Red
         Write-ColorText "$($langStrings.trapErrorMessage) $($_.Exception.Message)" $Yellow
@@ -15,7 +19,6 @@ trap {
         Write-ColorText "An unexpected error occurred! Exiting safely..." -ForegroundColor Red
         Write-ColorText "Error: $($_.Exception.Message)" -ForegroundColor Yellow
     }
-
     Cleanup
     exit 1
 }
@@ -46,7 +49,7 @@ function Write-ColorText {
     Write-Host $Text -ForegroundColor $Color
 }
 
-# Clears the screen and displays the script's banner.
+# Clears the screen and displays the script's main banner.
 function Show-Banner {
     Clear-Host
     Write-ColorText "================================================================" $Cyan
@@ -55,7 +58,7 @@ function Show-Banner {
     Write-Host ""
 }
 
-# Pauses the script and waits for a key press.
+# Pauses the script and waits for a key press from the user.
 function Suspend-Script {
     param([string]$Message)
     if (-not [string]::IsNullOrWhiteSpace($Message)) {
@@ -73,20 +76,15 @@ function Invoke-LongRunningOperation {
         [ScriptBlock]$ScriptBlock,
         [string]$Message
     )
-
     $job = Start-Job -ScriptBlock $ScriptBlock
     $spinner = @('|', '/', '-', '\')
     $spinnerIndex = 0
-    
     while ($job.State -eq 'Running') {
         Write-Host -NoNewline "`r$Message $($spinner[$spinnerIndex])"
         $spinnerIndex = ($spinnerIndex + 1) % $spinner.Length
         Start-Sleep -Milliseconds 100
     }
-
-    # Clear the spinner line.
-    Write-Host "`r$(' ' * ($Message.Length + 5))`r"
-
+    Write-Host "`r$(' ' * ($Message.Length + 5))`r" # Clear the spinner line.
     if ($job.State -eq 'Failed') {
         $errorMsg = $job.ChildJobs[0].Error
         throw ($langStrings.longOpFailed -f $errorMsg)
@@ -101,24 +99,18 @@ function Get-UserChoice {
         [bool]$MultiSelect = $false,
         [string]$GoBackOption = $langStrings.goBack
     )
-    
     Write-ColorText "`n$Title" $Yellow
     Write-ColorText ("=" * $Title.Length) $Yellow
-    
     for ($i = 0; $i -lt $Options.Length; $i++) {
         Write-Host "[$($i + 1)] $($Options[$i])"
     }
     Write-ColorText "[g] $GoBackOption" $Red
-
     if ($MultiSelect) {
         Write-ColorText "`n$($langStrings.getUserChoiceMultiSelect)" $Green
         $selection = Read-Host $langStrings.promptChoice
-        
         if ($selection -ieq 'g') { return 'go_back' }
         if ($selection -ieq "tumu" -or $selection -ieq "all") { return @(1..$Options.Length) }
-        
         try {
-            # Parse comma-separated numbers into an integer array.
             return $selection.Split(',').Trim() | ForEach-Object { [int]$_ }
         } catch {
             Write-ColorText $langStrings.invalidChoice $Red
@@ -137,7 +129,7 @@ function Get-UserChoice {
 }
 
 # Finds the required tool for creating an ISO (oscdimg.exe or mkisofs.exe).
-# If not found, it attempts to download mkisofs.
+# If not found, it attempts to download mkisofs from the project's repository.
 function Get-IsoTool {
     $adkPaths = @(
         "C:\Program Files (x86)\Windows Kits\11\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg",
@@ -150,26 +142,20 @@ function Get-IsoTool {
             return @{ Tool = 'oscdimg'; Path = $oscdimgPath }
         }
     }
-
     Write-ColorText $langStrings.isoToolMkisofsNotFound $Yellow
     $toolsDir = Join-Path $env:TEMP "WinIsoTools"
     $mkisofsPath = Join-Path $toolsDir "mkisofs.exe"
-
     if (Test-Path $mkisofsPath) {
         Write-ColorText $langStrings.isoToolMkisofsExists $Green
         return @{ Tool = 'mkisofs'; Path = $mkisofsPath }
     }
-
     try {
         New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null
         $repoUrl = "https://raw.githubusercontent.com/yusufklncc/winisoutil/main/tools"
-        
         Write-ColorText $langStrings.isoToolDownloadingMkisofs $Cyan
         Invoke-WebRequest -Uri "$repoUrl/mkisofs.exe" -OutFile $mkisofsPath
-        
         Write-ColorText $langStrings.isoToolDownloadingCygwin $Cyan
         Invoke-WebRequest -Uri "$repoUrl/cygwin1.dll" -OutFile (Join-Path $toolsDir "cygwin1.dll")
-
         if (Test-Path $mkisofsPath) {
             Write-ColorText $langStrings.isoToolDownloadSuccess $Green
             return @{ Tool = 'mkisofs'; Path = $mkisofsPath }
@@ -189,26 +175,21 @@ function Import-Configuration {
     Write-ColorText $langStrings.importTitle $Yellow
     Write-ColorText $langStrings.importDesc $Cyan
     $choice = Read-Host $langStrings.importPrompt
-    
     if ($choice -ieq 'E' -or $choice -ieq 'Y') {
         Add-Type -AssemblyName System.Windows.Forms
         $OpenFileDialog = New-Object System.Windows.Forms.OpenFileDialog
         $OpenFileDialog.Title = $langStrings.importFileSelectTitle
         $OpenFileDialog.Filter = "JSON files (*.json)|*.json"
         $OpenFileDialog.InitialDirectory = [Environment]::GetFolderPath("Desktop")
-
         if ($OpenFileDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
             $configPath = $OpenFileDialog.FileName
             try {
                 Write-ColorText ($langStrings.importReadingFile -f $configPath) $Green
                 $configContent = Get-Content -Path $configPath -Raw | ConvertFrom-Json
-                
-                # Safely populate the global config from the JSON file.
                 if ($configContent.PSObject.Properties.Name -contains 'RemovedApps') { $global:ScriptConfig.RemovedApps = $configContent.RemovedApps }
                 if ($configContent.PSObject.Properties.Name -contains 'RegistryTweaks') { $global:ScriptConfig.RegistryTweaks = $configContent.RegistryTweaks }
                 if ($configContent.PSObject.Properties.Name -contains 'EnabledFeatures') { $global:ScriptConfig.EnabledFeatures = $configContent.EnabledFeatures }
                 if ($configContent.PSObject.Properties.Name -contains 'ComponentServiceTweaks') { $global:ScriptConfig.ComponentServiceTweaks = $configContent.ComponentServiceTweaks }
-
                 Write-ColorText $langStrings.importSuccess $Green
                 Start-Sleep -Seconds 2
                 return $true # Return true to signal automatic mode.
@@ -229,11 +210,10 @@ function Import-Configuration {
     }
 }
 
-# Exports the current user selections to a .json file.
+# Exports the current user selections to a .json configuration file.
 function Export-Configuration {
     Show-Banner
     Write-ColorText $langStrings.exportTitle $Yellow
-
     Add-Type -AssemblyName System.Windows.Forms
     $SaveFileDialog = New-Object System.Windows.Forms.SaveFileDialog
     $SaveFileDialog.Title = $langStrings.exportFileSaveTitle
@@ -241,11 +221,9 @@ function Export-Configuration {
     $SaveFileDialog.DefaultExt = "json"
     $SaveFileDialog.FileName = $langStrings.exportFileName
     $SaveFileDialog.InitialDirectory = [Environment]::GetFolderPath("Desktop")
-
     if ($SaveFileDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
         $exportPath = $SaveFileDialog.FileName
         try {
-            # Create an object with all current settings to be saved.
             $exportObject = @{
                 Description            = $langStrings.exportConfigDesc
                 DateCreated            = (Get-Date).ToString("yyyy-MM-dd")
@@ -254,7 +232,6 @@ function Export-Configuration {
                 EnabledFeatures        = $global:ScriptConfig.EnabledFeatures
                 ComponentServiceTweaks = $global:ScriptConfig.ComponentServiceTweaks
             }
-
             $exportObject | ConvertTo-Json -Depth 5 | Out-File -FilePath $exportPath -Encoding utf8
             Write-ColorText ($langStrings.exportSuccess -f $exportPath) $Green
         } catch {
@@ -290,8 +267,7 @@ function Copy-IsoFiles {
         $mountResult = Mount-DiskImage -ImagePath $IsoPath -PassThru
         $driveLetter = ($mountResult | Get-Volume).DriveLetter
         Copy-Item -Path "$($driveLetter):\*" -Destination "C:\temp_iso\" -Recurse -Force
-        
-        # The install.wim file must be writable.
+        # The install.wim file must be writable for modifications.
         Write-ColorText $langStrings.copyIsoUnlockingWim $Yellow
         Set-ItemProperty -Path "C:\temp_iso\sources\install.wim" -Name IsReadOnly -Value $false
         Write-ColorText $langStrings.copyIsoSuccess $Green
@@ -299,12 +275,12 @@ function Copy-IsoFiles {
         Write-ColorText ($langStrings.copyIsoError -f $_) $Red
         throw $langStrings.copyIsoFail
     } finally {
-        # Always ensure the ISO is dismounted.
+        # Always ensure the ISO is dismounted, even if errors occur.
         if ($mountResult) { Dismount-DiskImage -ImagePath $IsoPath }
     }
 }
 
-# Finds the path to dism.exe, prioritizing the one from Windows ADK.
+# Finds the path to dism.exe, prioritizing the one from Windows ADK for better compatibility.
 function Find-DismPath {
     $dismPaths = @(
         "C:\Program Files (x86)\Windows Kits\11\Assessment and Deployment Kit\Deployment Tools\amd64\DISM\dism.exe",
@@ -319,7 +295,7 @@ function Find-DismPath {
         }
     }
     try {
-        # As a fallback, check if DISM is in the system's PATH.
+        # As a fallback, check if DISM is in the system's PATH variable.
         $dismInPath = Get-Command "dism.exe" -ErrorAction SilentlyContinue
         if ($dismInPath) {
             Write-ColorText ($langStrings.dismFoundInPath -f $dismInPath.Source) $Green
@@ -330,36 +306,30 @@ function Find-DismPath {
     return $null
 }
 
-# Allows the user to remove unwanted Windows editions from the install.wim file.
+# Allows the user to remove unwanted Windows editions from the install.wim file to save space.
 function Remove-WindowsEditions {
     $wimFile = "C:\temp_iso\sources\install.wim"
     do {
         Clear-Host
         Show-Banner
         Write-ColorText $langStrings.removeEditionsAnalyzing $Green
-		
         $wimInfo = & $global:dismPath /Get-WimInfo /WimFile:$wimFile
         $editions = $wimInfo | Select-String "Index|Name"
         Write-ColorText $langStrings.removeEditionsCurrent $Yellow
         $editions | ForEach-Object { Write-Host $_.Line }
         $indexCount = ($editions | Where-Object { $_.Line -match "Name" }).Count
-		
         # If only one edition is left, no more can be removed.
-		if ($indexCount -le 1) {	
+        if ($indexCount -le 1) {
             Write-ColorText $langStrings.removeEditionsOnlyOne $Yellow
             Start-Sleep -Seconds 3
-            break	
+            break
         }
-
         Write-ColorText "`n$($langStrings.removeEditionsGoBack)" $Cyan
         $choice = Read-Host $langStrings.removeEditionsPrompt
-
         if ($choice -ieq 'g') { break }
-
         try {
             # Sort descending to avoid index shifting issues during deletion.
             $indicesToDelete = $choice.Split(',') | ForEach-Object { [int]$_.Trim() } | Sort-Object -Descending
-            
             $validInput = $true
             foreach($index in $indicesToDelete) {
                 if ($index -lt 1 -or $index -gt $indexCount) {
@@ -368,12 +338,10 @@ function Remove-WindowsEditions {
                     break
                 }
             }
-
             if (-not $validInput) {
                 Start-Sleep -Seconds 3
                 continue
             }
-
             foreach ($index in $indicesToDelete) {
                 Write-ColorText ($langStrings.removeEditionsRemoving -f $index) $Yellow
                 try {
@@ -387,7 +355,6 @@ function Remove-WindowsEditions {
             }
             Write-ColorText $langStrings.removeEditionsListUpdated $Green
             Start-Sleep -Seconds 2
-
         } catch {
             Write-ColorText $langStrings.removeEditionsInvalidInput $Red
             Start-Sleep -Seconds 3
@@ -395,72 +362,65 @@ function Remove-WindowsEditions {
     } while ($true)
 }
 
-# Mounts the selected Windows image edition to the C:\mount directory.
+# Mounts the selected Windows image edition to the C:\mount directory for modification.
 function Mount-WindowsImage {
     Clear-Host
     Show-Banner
-
     $wimFile = "C:\temp_iso\sources\install.wim"
     Write-ColorText $langStrings.mountListingEditions $Green
     $wimInfo = & $global:dismPath /Get-WimInfo /WimFile:$wimFile
-	$editions = $wimInfo | Select-String "Index|Name"
-	Write-ColorText $langStrings.removeEditionsCurrent $Yellow
+    $editions = $wimInfo | Select-String "Index|Name"
+    Write-ColorText $langStrings.removeEditionsCurrent $Yellow
     $editions | ForEach-Object { Write-Host $_.Line }
     $indexCount = ($editions | Where-Object { $_.Line -match "Name" }).Count
-
     # If only one edition exists, mount it automatically.
-	if ($indexCount -eq 1) {
-		Write-ColorText "`n$($langStrings.mountMountingImage)" $Yellow
-		try {
+    if ($indexCount -eq 1) {
+        Write-ColorText "`n$($langStrings.mountMountingImage)" $Yellow
+        try {
             & $global:dismPath /Mount-Image /ImageFile:$wimFile /Index:1 /MountDir:"C:\mount"
-			if ($LASTEXITCODE -ne 0) { throw $langStrings.mountFail }
+            if ($LASTEXITCODE -ne 0) { throw $langStrings.mountFail }
             Write-ColorText $langStrings.mountSuccess $Green
-			Start-Sleep -Seconds 3
+            Start-Sleep -Seconds 3
             return $true
         } catch {
             Write-ColorText ($langStrings.mountError -f $_) $Red
             throw $langStrings.mountFail
         }
-	} else {
+    } else {
         # If multiple editions exist, prompt the user for a selection.
-		$choice = Read-Host $langStrings.mountPromptIndex
-		if ($choice -match '^\d+$' -and [int]$choice -ge 1 -and [int]$choice -le $indexCount) {
-			Write-ColorText $langStrings.mountMountingImage $Yellow
-			try {
-				& $global:dismPath /Mount-Image /ImageFile:$wimFile /Index:$choice /MountDir:"C:\mount"
-				if ($LASTEXITCODE -ne 0) { throw $langStrings.mountFail }
-				Write-ColorText $langStrings.mountSuccess $Green
-				Start-Sleep -Seconds 3
-				return $true
-			} catch {
-				Write-ColorText ($langStrings.mountError -f $_) $Red
-				throw $langStrings.mountFail
-			}	
-		} else {
-			Write-ColorText $langStrings.mountInvalidIndex $Red
-			return $false
-		}
-	}
+        $choice = Read-Host $langStrings.mountPromptIndex
+        if ($choice -match '^\d+$' -and [int]$choice -ge 1 -and [int]$choice -le $indexCount) {
+            Write-ColorText $langStrings.mountMountingImage $Yellow
+            try {
+                & $global:dismPath /Mount-Image /ImageFile:$wimFile /Index:$choice /MountDir:"C:\mount"
+                if ($LASTEXITCODE -ne 0) { throw $langStrings.mountFail }
+                Write-ColorText $langStrings.mountSuccess $Green
+                Start-Sleep -Seconds 3
+                return $true
+            } catch {
+                Write-ColorText ($langStrings.mountError -f $_) $Red
+                throw $langStrings.mountFail
+            }
+        } else {
+            Write-ColorText $langStrings.mountInvalidIndex $Red
+            return $false
+        }
+    }
 }
 
-# Adds Windows Update packages (.msu) from a user-selected folder.
+# Integrates Windows Update packages (.msu) from a user-selected folder into the image.
 function Add-WindowsUpdates {
     Clear-Host
     Show-Banner
-    
-    # Create and show a folder browser dialog.
     Add-Type -AssemblyName System.Windows.Forms
     $FolderBrowserDialog = New-Object System.Windows.Forms.FolderBrowserDialog
     $FolderBrowserDialog.Description = $langStrings.updatesPromptPath
-    
     $updatesPath = ""
     if ($FolderBrowserDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
         $updatesPath = $FolderBrowserDialog.SelectedPath
     } else {
-        # Return to the menu if the user cancels the dialog.
-        return
+        return # Return to the menu if the user cancels the dialog.
     }
-
     if (Test-Path $updatesPath) {
         $updateFiles = Get-ChildItem -Path $updatesPath -Filter "*.msu" -ErrorAction Silentlycontinue
         if ($updateFiles) {
@@ -478,30 +438,24 @@ function Add-WindowsUpdates {
             Write-ColorText $langStrings.updatesMsuNotFound $Red
         }
     } else {
-        # This part should theoretically not be reached as the dialog ensures a valid path.
         Write-ColorText $langStrings.updatesInvalidPath $Red
     }
     if ($script:runMode -ne 'AUTOMATIC') { Suspend-Script }
 }
 
-# Adds drivers (.inf) from a user-selected folder and its subdirectories.
+# Integrates drivers (.inf) from a user-selected folder and its subdirectories into the image.
 function Add-Drivers {
-	Clear-Host
-	Show-Banner
-
-    # Create and show a folder browser dialog.
+    Clear-Host
+    Show-Banner
     Add-Type -AssemblyName System.Windows.Forms
     $FolderBrowserDialog = New-Object System.Windows.Forms.FolderBrowserDialog
     $FolderBrowserDialog.Description = $langStrings.driversPromptPath
-    
     $driversPath = ""
     if ($FolderBrowserDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
         $driversPath = $FolderBrowserDialog.SelectedPath
     } else {
-        # Return to the menu if the user cancels the dialog.
-        return
+        return # Return to the menu if the user cancels the dialog.
     }
-
     if (Test-Path $driversPath) {
         Write-ColorText $langStrings.driversAdding $Yellow
         try {
@@ -519,7 +473,6 @@ function Add-Drivers {
 
 # Allows removing Windows components and disabling services based on definitions in an external file.
 function Set-ComponentsAndServices {
-    # Load tweak definitions from the external file.
     try {
         . (Join-Path $PSScriptRoot "src/components.ps1")
     } catch {
@@ -527,53 +480,41 @@ function Set-ComponentsAndServices {
         Suspend-Script
         return
     }
-    
     # Dynamically determine the description property based on the current language.
     $descProperty = "Description_" + $global:currentLanguage
     if ($allComponentTweaks -and -not ($allComponentTweaks[0].PSObject.Properties.Name -contains $descProperty)) {
         $descProperty = "Description_en" # Fallback to English if the language is not found.
     }
-
     $tweaksToApply = [System.Collections.Generic.List[object]]::new()
     $runInManualMode = $script:runMode -eq 'MANUAL'
-
     if (-not $runInManualMode) { # Automatic Mode
         if ($global:ScriptConfig.ComponentServiceTweaks.Count -gt 0) {
             Write-ColorText $langStrings.compSvcApplyingFromConfig $Cyan
             $selectedTweakIDs = $global:ScriptConfig.ComponentServiceTweaks
             $tweaksToApply.AddRange(($allComponentTweaks | Where-Object { $selectedTweakIDs -contains $_.ID }))
         }
-    } 
+    }
     else { # Manual Mode
         Clear-Host
         Show-Banner
-
         $menuOptions = ($allComponentTweaks | ForEach-Object { $_.$descProperty }) + $langStrings.compSvcApplyAll
         $selection = Get-UserChoice -Title $langStrings.compSvcTitle -Options $menuOptions -MultiSelect $true
-        
         if ($selection -eq 'go_back') { return }
-
         if ($selection -is [Array] -and $selection.Count -eq 0) {
             Write-ColorText $langStrings.compSvcNothingSelected $Yellow
             Start-Sleep -Seconds 2
             return
         }
-
         if ($selection -contains $menuOptions.Length) {
             $tweaksToApply.AddRange($allComponentTweaks)
         } else {
             $selection | ForEach-Object { $tweaksToApply.Add($allComponentTweaks[$_ - 1]) }
         }
-        
-        # CORRECTED: Save the IDs of the selected tweaks, not the whole objects.
         $global:ScriptConfig.ComponentServiceTweaks = $tweaksToApply.ID
     }
-
     if ($tweaksToApply.Count -eq 0) {
-        # This point is only reached in Automatic Mode if there's nothing in the config, so we can exit quietly.
         return
     }
-
     $servicesToDisable = $tweaksToApply | Where-Object { $_.Type -eq 'Service' }
     if ($servicesToDisable) {
         try {
@@ -585,8 +526,7 @@ function Set-ComponentsAndServices {
                     try {
                         $servicePath = "Registry::HKLM\TEMPSYSTEM\ControlSet001\Services\$serviceName"
                         if (Test-Path $servicePath) {
-                            # Set Start type to 4, which means 'Disabled'.
-                            Set-ItemProperty -Path $servicePath -Name "Start" -Value 4 -Type DWord -Force
+                            Set-ItemProperty -Path $servicePath -Name "Start" -Value 4 -Type DWord -Force # 4 = Disabled
                             Write-ColorText ($langStrings.compSvcServiceDisabled -f $serviceName) $Green
                         } else {
                             Write-ColorText ($langStrings.compSvcServiceNotFound -f $serviceName) $Yellow
@@ -602,7 +542,6 @@ function Set-ComponentsAndServices {
             REG UNLOAD HKLM\TEMPSYSTEM
         }
     }
-
     $componentsToRemove = $tweaksToApply | Where-Object { $_.Type -eq 'Component' }
     if ($componentsToRemove) {
         Write-ColorText $langStrings.compSvcRemovingComponents $Yellow
@@ -612,7 +551,6 @@ function Set-ComponentsAndServices {
             try {
                 $featureInfo = & $global:dismPath /Image:C:\mount /Get-FeatureInfo /FeatureName:$($tweak.FeatureName)
                 $featureStateLine = $featureInfo | Select-String "State"
-                
                 if ($featureStateLine) {
                     $featureState = $featureStateLine.Line.Split(':')[1].Trim()
                     if ($featureState -eq 'Enabled') {
@@ -634,13 +572,11 @@ function Set-ComponentsAndServices {
             }
         }
     }
-
     if ($runInManualMode) { Suspend-Script }
 }
 
-# Allows applying various registry tweaks from an external definition file.
+# Applies various registry tweaks from an external definition file.
 function Set-Registry {
-    # Load tweak definitions from the external file.
     try {
         . (Join-Path $PSScriptRoot "src/tweaks.ps1")
     } catch {
@@ -648,21 +584,19 @@ function Set-Registry {
         Suspend-Script
         return
     }
-
     # Dynamically determine the description property based on the current language.
     $descProperty = "Description_" + $global:currentLanguage
     if ($allTweaks -and -not ($allTweaks[0].PSObject.Properties.Name -contains $descProperty)) {
         $descProperty = "Description_en" # Fallback to English.
     }
-
-    $finalSetupScript = "[System.Threading.Thread]::Sleep(5000); try { Remove-Item -Path 'Registry::HKCU\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\Cache\DefaultAccount' -Recurse -Force; Stop-Process -Name explorer -Force } catch {}"
-    
+    # Defines the full script that runs on the target system after installation.
+    # It cleans up a cloud store registry key, removes Windows.old, and restarts Explorer to apply changes.
+    $finalSetupScript = "[System.Threading.Thread]::Sleep(5000); try { Remove-Item -Path 'Registry::HKCU\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\Cache\DefaultAccount' -Recurse -Force; Remove-Item -Path 'C:\Windows.old' -Recurse -Force; Stop-Process -Name explorer -Force } catch {}"
     $tweaksToApply = [System.Collections.Generic.List[object]]::new()
-
     if ($script:runMode -eq 'AUTOMATIC') {
         Write-ColorText $langStrings.regApplyingFromConfig $Cyan
         if ($global:ScriptConfig.RegistryTweaks.Count -gt 0) {
-            $selectedTweakIDs = $global:ScriptConfig.RegistryTweaks # Config stores tweak IDs.
+            $selectedTweakIDs = $global:ScriptConfig.RegistryTweaks
             $tweaksToApply.AddRange(($allTweaks | Where-Object { $selectedTweakIDs -contains $_.ID }))
         }
     }
@@ -672,15 +606,12 @@ function Set-Registry {
             Show-Banner
             Write-ColorText $langStrings.regMenuTitle $Yellow
             Write-ColorText ("=" * $langStrings.regMenuTitle.Length) $Yellow
-
             if ($tweaksToApply.Count -gt 0) {
                 Write-ColorText "`n$($langStrings.regCurrentSelections)" $Cyan
                 $tweaksToApply | ForEach-Object { Write-ColorText "- $($_.$descProperty)" $Green }
             }
-
             $menuOptions = $allTweaks | ForEach-Object { $_.$descProperty }
             $allOptionIndex = $menuOptions.Count + 1
-            
             for ($i = 0; $i -lt $menuOptions.Length; $i++) {
                 Write-Host "[$($i + 1)] $($menuOptions[$i])"
             }
@@ -688,11 +619,8 @@ function Set-Registry {
             Write-ColorText "[$allOptionIndex] $($langStrings.regSelectAll)" $Cyan
             Write-ColorText "--------------------------------" $Yellow
             Write-ColorText $langStrings.regGoBackAndApply $Red
-            
             $selection = Read-Host "`n$($langStrings.regPrompt)"
-
             if ($selection -ieq 'g') { break }
-            
             try {
                 if ($selection -eq $allOptionIndex) { # Toggle all tweaks.
                     if ($tweaksToApply.Count -eq $allTweaks.Count) {
@@ -706,7 +634,6 @@ function Set-Registry {
                     Start-Sleep -Seconds 1
                     continue
                 }
-
                 $selections = $selection.Split(',').Trim()
                 foreach ($sel in $selections) {
                     if ($sel -match "^\d+$") {
@@ -726,7 +653,7 @@ function Set-Registry {
                         }
                     } else {
                         Write-ColorText ($langStrings.regInvalidInput -f $sel) $Red
-                        break 
+                        break
                     }
                 }
                 Start-Sleep -Milliseconds 500
@@ -735,19 +662,20 @@ function Set-Registry {
             }
         } while ($true)
     }
-    
     # Handle mutually exclusive Windows Update options.
     $selectedUpdateOptions = $tweaksToApply | Where-Object { $_.ID -like "WU_*" }
     if ($selectedUpdateOptions.Count -gt 1) {
         Write-ColorText ($langStrings.regWarnMultiUpdate -f $selectedUpdateOptions[0].$descProperty) $Yellow
         Start-Sleep -Seconds 3
-        $firstOption = $selectedUpdateOptions[0]
-        $tweaksToApply.RemoveAll({ ($_.ID -like "WU_*") -and ($_.ID -ne $firstOption.ID) })
+        $firstUpdateOption = $selectedUpdateOptions[0]
+        $otherTweaks = $tweaksToApply | Where-Object { $_.ID -notlike "WU_*" }
+        # Rebuild the list to contain only the other tweaks and the single chosen WU tweak.
+        $tweaksToApply.Clear()
+        $tweaksToApply.AddRange($otherTweaks)
+        $tweaksToApply.Add($firstUpdateOption)
     }
-
     # Save the selected tweak IDs to the global config.
     $global:ScriptConfig.RegistryTweaks = $tweaksToApply.ID
-
     if ($tweaksToApply.Count -eq 0) {
         if ($script:runMode -eq 'MANUAL') {
             Write-ColorText $langStrings.regNothingSelected $Yellow
@@ -755,46 +683,43 @@ function Set-Registry {
         }
         return
     }
-
     try {
         # Load the necessary registry hives from the mounted image.
         REG LOAD HKLM\TEMP C:\mount\Windows\System32\config\SOFTWARE
         REG LOAD HKU\TEMP C:\mount\Users\Default\NTUSER.DAT
-
         $setupScriptContent = [System.Text.StringBuilder]::new()
-        
         foreach ($tweak in $tweaksToApply) {
             Write-ColorText ($langStrings.regApplying -f $tweak.$descProperty) $Yellow
             try {
                 switch ($tweak.Action) {
                     "WU_Handler" {
                         $auPath = 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\WindowsUpdate\AU'
-                        New-Item -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\WindowsUpdate' -Force -ErrorAction SilentlyContinue | Out-Null
-                        New-Item -Path $auPath -Force -ErrorAction SilentlyContinue | Out-Null
-                        
+                        if (-not (Test-Path $auPath)) { New-Item -Path $auPath -Force | Out-Null }
                         if ($tweak.ID -eq 'WU_NotifyDownload') {
-                            Set-ItemProperty -Path $auPath -Name 'AUOptions' -Value 2 -Type DWord -Force
-                            Set-ItemProperty -Path $auPath -Name 'NoAutoUpdate' -Value 1 -Type DWord -Force
+                            Set-ItemProperty -Path $auPath -Name 'AUOptions' -Value 2 -Type DWord -Force -ErrorAction Stop
+                            Set-ItemProperty -Path $auPath -Name 'NoAutoUpdate' -Value 1 -Type DWord -Force -ErrorAction Stop
                         } else { # WU_NotifyInstall
-                            Set-ItemProperty -Path $auPath -Name 'AUOptions' -Value 3 -Type DWord -Force
-                            Set-ItemProperty -Path $auPath -Name 'NoAutoUpdate' -Value 0 -Type DWord -Force
+                            Set-ItemProperty -Path $auPath -Name 'AUOptions' -Value 3 -Type DWord -Force -ErrorAction Stop
+                            Set-ItemProperty -Path $auPath -Name 'NoAutoUpdate' -Value 0 -Type DWord -Force -ErrorAction Stop
                         }
                         Write-ColorText $langStrings.regSuccess $Green
                         break
                     }
                     "Registry" {
-                        $regPath = "Registry::$($tweak.Path)"
+                        $regPath = $tweak.Path
+                        $parentPath = Split-Path $regPath -Parent
                         if ($tweak.Type -eq "Remove") {
-                            if (Test-Path $regPath) { Remove-ItemProperty -Path $regPath -Name $tweak.Name -Force -ErrorAction SilentlyContinue }
+                            if (Test-Path $regPath) { Remove-ItemProperty -Path $regPath -Name $tweak.Name -Force -ErrorAction Stop }
                         } else {
-                            if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
-                            Set-ItemProperty -Path $regPath -Name $tweak.Name -Value $tweak.Value -Type $tweak.Type -Force
+                            if (-not (Test-Path $parentPath)) { New-Item -Path $parentPath -Force | Out-Null }
+                            Set-ItemProperty -Path $regPath -Name $tweak.Name -Value $tweak.Value -Type $tweak.Type -Force -ErrorAction Stop
                         }
                         Write-ColorText $langStrings.regSuccess $Green
                         break
                     }
                     "InlineScript" {
-                        Invoke-Command -ScriptBlock ([scriptblock]::Create($tweak.Code))
+                        # Execute the scriptblock defined in tweaks.ps1 and force errors to be terminating.
+                        . $tweak.Code
                         Write-ColorText $langStrings.regSuccess $Green
                         break
                     }
@@ -806,10 +731,10 @@ function Set-Registry {
                     }
                 }
             } catch {
+                # This catch block will now properly handle errors from all actions.
                 Write-ColorText ($langStrings.regFail -f $tweak.$descProperty, $_.Exception.Message) $Red
             }
         }
-
         # If there are any post-setup tweaks, create the necessary runner files.
         if ($setupScriptContent.Length -gt 0) {
             $setupScriptContent.AppendLine($finalSetupScript) | Out-Null
@@ -820,20 +745,17 @@ function Set-Registry {
             $postSetupScriptPath = Join-Path $scriptsPath "post-setup.ps1"
             $setupScriptContent.ToString() | Out-File -FilePath $postSetupScriptPath -Encoding utf8
             Write-ColorText $langStrings.regPostSetupScriptCreated $Green
-            
             # Create a .bat file on the default user's desktop to manually trigger the script.
             $desktopPath = "C:\mount\Users\Default\Desktop"
             if (-not (Test-Path $desktopPath)) {
                 New-Item -ItemType Directory -Path $desktopPath -Force | Out-Null
             }
             $scriptPathInWindows = '%SystemRoot%\Setup\Scripts\post-setup.ps1'
-            
             $batContent = $langStrings.regRunnerBatBody -f $scriptPathInWindows
             $batFileName = $langStrings.regRunnerBatTitle
             $batContent | Out-File -FilePath (Join-Path $desktopPath $batFileName) -Encoding OEM
             Write-ColorText ($langStrings.regManualRunnerCreated -f $batFileName) $Green
         }
-        
     } catch {
         Write-ColorText ($langStrings.regErrorGeneral -f $_) $Red
     } finally {
@@ -851,12 +773,10 @@ function Set-Registry {
 function Remove-WindowsApps {
     $mountPath = "C:\mount"
     $packagesToRemove = [System.Collections.Generic.List[string]]::new()
-
     if ($script:runMode -eq 'AUTOMATIC' -and $global:ScriptConfig.RemovedApps.Count -gt 0) {
         Write-ColorText $langStrings.appRemoveFromConfig $Cyan
         $packagesToRemove.AddRange([string[]]$global:ScriptConfig.RemovedApps)
     } else {
-        # Load the app exclusion list from the external file.
         try {
             . (Join-Path $PSScriptRoot "src/app-exclusion-list.ps1")
         } catch {
@@ -864,7 +784,6 @@ function Remove-WindowsApps {
             Suspend-Script
             return
         }
-
         Write-ColorText $langStrings.appRemoveGettingList $Yellow
         $dismOutput = & $global:dismPath /Image:$mountPath /Get-ProvisionedAppxPackages
         if ($LASTEXITCODE -ne 0) {
@@ -872,7 +791,6 @@ function Remove-WindowsApps {
             if ($script:runMode -ne 'AUTOMATIC') { Suspend-Script }
             return
         }
-
         # Parse the raw DISM output into structured objects.
         $allAppPackages = [System.Collections.Generic.List[object]]::new()
         $packageBlocks = ($dismOutput -join "`n") -split '(?:\r?\n){2,}'
@@ -887,7 +805,6 @@ function Remove-WindowsApps {
             }
         }
         $allAppPackages = $allAppPackages | Sort-Object DisplayName
-        
         Write-ColorText $langStrings.appRemoveExcludingCritical $Cyan
         $filteredAppPackages = $allAppPackages | Where-Object {
             $currentPackage = $_
@@ -900,17 +817,14 @@ function Remove-WindowsApps {
             }
             -not $isExcluded
         }
-        
         if (-not $filteredAppPackages) {
             Write-ColorText $langStrings.appRemoveNotFound $Cyan
             if ($script:runMode -ne 'AUTOMATIC') { Suspend-Script }
             return
         }
-
         $menuOptions = $filteredAppPackages.DisplayName + $langStrings.appRemoveApplyAll
         $selection = Get-UserChoice -Title $langStrings.appRemoveTitle -Options $menuOptions -MultiSelect $true
         if ($selection -eq 'go_back' -or !$selection) { return }
-
         if ($selection -contains $menuOptions.Length) {
             $packagesToRemove.AddRange($filteredAppPackages.PackageName)
         } else {
@@ -920,7 +834,6 @@ function Remove-WindowsApps {
         }
         $global:ScriptConfig.RemovedApps = $packagesToRemove
     }
-
     if ($packagesToRemove.Count -eq 0) {
         if ($script:runMode -eq 'MANUAL') {
             Write-ColorText $langStrings.appRemoveNothingSelected $Yellow
@@ -928,7 +841,6 @@ function Remove-WindowsApps {
         }
         return
     }
-
     Write-ColorText "`n$($langStrings.appRemoveStarting)" $Green
     foreach ($packageName in $packagesToRemove) {
         Write-ColorText ($langStrings.appRemoveRemoving -f $packageName) $Yellow
@@ -943,14 +855,12 @@ function Remove-WindowsApps {
             Write-ColorText ($langStrings.appRemoveError -f $packageName, $_) $Red
         }
     }
-    
     Write-ColorText "`n$($langStrings.appRemoveComplete)" $Cyan
     if ($script:runMode -ne 'AUTOMATIC') { Suspend-Script }
 }
 
 # Allows enabling optional Windows features based on definitions in an external file.
 function Enable-Features {
-    # Load feature definitions from the external file.
     try {
         . (Join-Path $PSScriptRoot "src/features.ps1")
     } catch {
@@ -958,15 +868,12 @@ function Enable-Features {
         Suspend-Script
         return
     }
-    
     # Dynamically determine the name property based on the current language.
     $nameProperty = "Name_" + $global:currentLanguage
     if ($allFeatures -and -not ($allFeatures[0].PSObject.Properties.Name -contains $nameProperty)) {
         $nameProperty = "Name_en" # Fallback to English.
     }
-
     $featuresToEnable = [System.Collections.Generic.List[object]]::new()
-
     if ($script:runMode -eq 'AUTOMATIC' -and $global:ScriptConfig.EnabledFeatures.Count -gt 0) {
         Write-ColorText $langStrings.featureEnableFromConfig $Cyan
         $selectedFeatureIDs = $global:ScriptConfig.EnabledFeatures
@@ -975,7 +882,6 @@ function Enable-Features {
         $menuOptions = ($allFeatures | ForEach-Object { $_.$nameProperty }) + $langStrings.featureEnableApplyAll
         $selection = Get-UserChoice -Title $langStrings.featureEnableTitle -Options $menuOptions -MultiSelect $true
         if ($selection -eq 'go_back' -or !$selection) { return }
-
         if ($selection -contains $menuOptions.Length) {
             $featuresToEnable.AddRange($allFeatures)
         } else {
@@ -983,7 +889,6 @@ function Enable-Features {
         }
         $global:ScriptConfig.EnabledFeatures = $featuresToEnable.FeatureName
     }
-    
     if ($featuresToEnable.Count -eq 0) {
         if ($script:runMode -eq 'MANUAL') {
             Write-ColorText $langStrings.featureEnableNothingSelect $Yellow
@@ -991,7 +896,6 @@ function Enable-Features {
         }
         return
     }
-
     foreach ($feature in $featuresToEnable) {
         $featureNameDisplay = $feature.$nameProperty
         Write-ColorText ($langStrings.featureEnableEnabling -f $featureNameDisplay) $Green
@@ -1007,27 +911,23 @@ function Enable-Features {
             Write-ColorText ($langStrings.featureEnableError -f $featureNameDisplay, $_) $Red
         }
     }
-    
-	if ($script:runMode -ne 'AUTOMATIC') { Suspend-Script }
+    if ($script:runMode -ne 'AUTOMATIC') { Suspend-Script }
 }
 
 # Commits all changes to the image and creates the final bootable ISO file.
 function Complete-Image {
     Remove-Item -Path "C:\mount\dism.log" -Force -ErrorAction SilentlyContinue
-	Start-Sleep -Seconds 3
-	
+    Start-Sleep -Seconds 3
     try {
         $commitScriptBlock = {
             & $using:global:dismPath /Unmount-Image /MountDir:"C:\mount" /Commit
             if ($LASTEXITCODE -ne 0) { throw ($using:langStrings.completeUnmountFail -f $LASTEXITCODE) }
         }
         Invoke-LongRunningOperation -ScriptBlock $commitScriptBlock -Message $langStrings.longOpSavingImage
-        
     } catch {
         Write-ColorText ($langStrings.completeSaveError -f $_) $Red
         throw $langStrings.completeFinalizeFail
     }
-    
     Write-ColorText $langStrings.completeCreatingIso $Green
     $isoTool = Get-IsoTool
     if (-not $isoTool) {
@@ -1035,22 +935,19 @@ function Complete-Image {
         Write-ColorText $langStrings.completeToolNotFoundHelp $Yellow
         return
     }
-
     Add-Type -AssemblyName System.Windows.Forms
-	$SaveFileDialog = New-Object System.Windows.Forms.SaveFileDialog
-	$SaveFileDialog.Title = $langStrings.completeSaveFileTitle
-	$SaveFileDialog.Filter = "ISO files (*.iso)|*.iso|All files (*.*)|*.*"
-	$SaveFileDialog.DefaultExt = "iso"
-	$SaveFileDialog.FileName = $langStrings.completeDefaultIsoName
-	$SaveFileDialog.InitialDirectory = [Environment]::GetFolderPath("Desktop")
-
-	if ($SaveFileDialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
+    $SaveFileDialog = New-Object System.Windows.Forms.SaveFileDialog
+    $SaveFileDialog.Title = $langStrings.completeSaveFileTitle
+    $SaveFileDialog.Filter = "ISO files (*.iso)|*.iso|All files (*.*)|*.*"
+    $SaveFileDialog.DefaultExt = "iso"
+    $SaveFileDialog.FileName = $langStrings.completeDefaultIsoName
+    $SaveFileDialog.InitialDirectory = [Environment]::GetFolderPath("Desktop")
+    if ($SaveFileDialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
         Write-ColorText $langStrings.completeOutputCanceled $Red
         return
     }
     $outputIso = $SaveFileDialog.FileName
     Write-Host ($langStrings.completeOutputIsoPath -f $outputIso) -ForegroundColor Green
-
     try {
         if ($isoTool.Tool -eq 'oscdimg') {
             # oscdimg requires a specific bootdata string for dual boot (BIOS + UEFI).
@@ -1073,30 +970,25 @@ function Cleanup {
     # This function checks if $langStrings is loaded to run safely even within a trap that occurs early.
     $cleanupMsg = if ($null -ne $langStrings) { $langStrings.cleanupCleaning } else { "Cleaning up temporary files and folders..." }
     Write-ColorText $cleanupMsg $Green
-
     [gc]::Collect(); [gc]::WaitForPendingFinalizers()
-    
     # Unload registry hives, suppressing errors if they are not loaded.
     try { REG UNLOAD HKU\TEMP 2>$null } catch {}
     try { REG UNLOAD HKLM\TEMP 2>$null } catch {}
-    
     # If an image is still mounted, discard changes to prevent a "dirty" state.
     if (Test-Path "C:\mount\Windows") {
         $mountedMsg = if ($null -ne $langStrings) { $langStrings.cleanupImageMounted } else { "There is still a mounted image, discarding changes..." }
         Write-ColorText $mountedMsg $Yellow
         & $global:dismPath /Unmount-Image /MountDir:"C:\mount" /Discard
     }
-
     if (Test-Path "C:\temp_iso") { Remove-Item "C:\temp_iso" -Recurse -Force -ErrorAction SilentlyContinue }
     if (Test-Path "C:\mount") { Remove-Item "C:\mount" -Recurse -Force -ErrorAction SilentlyContinue }
-    
     $completeMsg = if ($null -ne $langStrings) { $langStrings.cleanupComplete } else { "Cleanup complete!" }
     Write-ColorText $completeMsg $Green
 }
 
 # --- SCRIPT EXECUTION START ---
 
-# 1. Language Selection (hardcoded prompt to avoid dependencies).
+# 1. Language Selection. This part is hardcoded to avoid dependencies before loading the language file.
 Clear-Host
 Write-ColorText "================================================================" $Cyan
 Write-ColorText "     Lütfen bir dil seçin / Please select a language     " $Cyan
@@ -1106,22 +998,21 @@ Write-ColorText "1. Türkçe" $White
 Write-ColorText "2. English" $White
 Write-Host ""
 $langChoice = Read-Host "Seçiminiz / Your choice"
-
 switch ($langChoice) {
     "1" { $global:currentLanguage = 'tr' }
     "2" { $global:currentLanguage = 'en' }
-    default { 
+    default {
         Write-Host "Invalid selection, defaulting to English." -ForegroundColor Yellow
-        $global:currentLanguage = 'en' 
+        $global:currentLanguage = 'en'
     }
 }
 
-# 2. Load the language file based on the selection.
+# 2. Load the language strings from an external file based on the selection.
 try {
     . (Join-Path $PSScriptRoot "src/languages.ps1")
 } catch {
     Write-ColorText "CRITICAL ERROR: languages.ps1 could not be found or loaded. The script cannot continue." $Red
-    Write-ColorText "Please ensure languages.ps1 is in the same folder as the main script." $Yellow
+    Write-ColorText "Please ensure languages.ps1 is in the 'src' folder next to the main script." $Yellow
     Read-Host "Press Enter to exit."
     exit 1
 }
@@ -1132,65 +1023,58 @@ if (-not $global:dismPath) {
     Write-ColorText $langStrings.dismNotFoundExit $Red
     exit 1
 }
-
 Show-Banner
-	
-# Check for Administrator privileges.
+
+# 4. Check for Administrator privileges.
 if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]"Administrator")) {
     Write-ColorText $langStrings.scriptNotAdmin $Red
     Start-Sleep -Seconds 5
     exit 1
 }
 
-# Main workflow logic.
+# --- Main workflow logic ---
 if (Test-Path "C:\mount\Windows") {
-    # If a previous session was interrupted, resume from the menu.
+    # If a previous session was interrupted, resume from the main menu.
     Write-ColorText $langStrings.scriptExistingMount $Yellow
     Start-Sleep -Seconds 3
 } else {
     # Start a new session.
-	if ([string]::IsNullOrWhiteSpace($IsoPath)) {
+    if ([string]::IsNullOrWhiteSpace($IsoPath)) {
         # If no ISO path was provided as a parameter, open a file dialog.
-		Add-Type -AssemblyName System.Windows.Forms
-		$OpenFileDialog = New-Object System.Windows.Forms.OpenFileDialog
-		$OpenFileDialog.Title = $langStrings.scriptSelectIso
-		$OpenFileDialog.Filter = "ISO files (*.iso)|*.iso|All files (*.*)|*.*"
-		$OpenFileDialog.InitialDirectory = [Environment]::GetFolderPath("Desktop")
-		
-		if ($OpenFileDialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
+        Add-Type -AssemblyName System.Windows.Forms
+        $OpenFileDialog = New-Object System.Windows.Forms.OpenFileDialog
+        $OpenFileDialog.Title = $langStrings.scriptSelectIso
+        $OpenFileDialog.Filter = "ISO files (*.iso)|*.iso|All files (*.*)|*.*"
+        $OpenFileDialog.InitialDirectory = [Environment]::GetFolderPath("Desktop")
+        if ($OpenFileDialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
             Write-Host $langStrings.scriptIsoNotSelected -ForegroundColor Red
-			exit
+            exit
         }
         $IsoPath = $OpenFileDialog.FileName
         Write-Host ($langStrings.scriptIsoSelected -f $IsoPath) -ForegroundColor Green
-	}
-	if (-not (Test-Path $IsoPath) -or $IsoPath -notlike "*.iso") {
-		Write-ColorText ($langStrings.scriptIsoInvalid -f $IsoPath) $Red
-		exit 1
-	}
-	Write-ColorText ($langStrings.scriptIsoFound -f $IsoPath) $Green
-		
+    }
+    if (-not (Test-Path $IsoPath) -or $IsoPath -notlike "*.iso") {
+        Write-ColorText ($langStrings.scriptIsoInvalid -f $IsoPath) $Red
+        exit 1
+    }
+    Write-ColorText ($langStrings.scriptIsoFound -f $IsoPath) $Green
     # Prepare the environment and mount the image.
-	Initialize-Environment
-	Copy-IsoFiles -IsoPath $IsoPath
-	Remove-WindowsEditions
-
-	if (-not (Mount-WindowsImage)) {
-		Write-ColorText $langStrings.scriptMountFail $Red
-		Cleanup
-		exit 1
-	}
-
+    Initialize-Environment
+    Copy-IsoFiles -IsoPath $IsoPath
+    Remove-WindowsEditions
+    if (-not (Mount-WindowsImage)) {
+        Write-ColorText $langStrings.scriptMountFail $Red
+        Cleanup
+        exit 1
+    }
     # Optional initial prompts for common tasks.
     Show-Banner
     $updateChoice = Read-Host "$($langStrings.scriptPromptUpdate) "
     if ($updateChoice -ieq 'E' -or $updateChoice -ieq 'Y') { Add-WindowsUpdates }
-
     Show-Banner
     $driverChoice = Read-Host "$($langStrings.scriptPromptDriver) "
     if ($driverChoice -ieq 'E' -or $driverChoice -ieq 'Y') { Add-Drivers }
-
-    # Check if the user wants to start in automatic mode.
+    # Check if the user wants to start in automatic mode by importing a config file.
     if (Import-Configuration) {
         $script:runMode = 'AUTOMATIC'
     }
@@ -1206,7 +1090,6 @@ if ($script:runMode -eq 'AUTOMATIC') {
     if ($global:ScriptConfig.RemovedApps.Count -gt 0) { Remove-WindowsApps }
     if ($global:ScriptConfig.EnabledFeatures.Count -gt 0) { Enable-Features }
     Write-ColorText "`n$($langStrings.execAutoModeCompleted)" $Cyan
-
     # Ask the user if they want to switch to manual mode for further changes.
     $extraChoice = Read-Host "$($langStrings.execAutoPromptManual) "
     if ($extraChoice -ieq 'E' -or $extraChoice -ieq 'Y') {
@@ -1234,9 +1117,7 @@ if ($script:runMode -eq 'MANUAL') {
         Write-ColorText $langStrings.mainMenu8 $Green
         Write-ColorText $langStrings.mainMenu9 $Red
         Write-Host ""
-        
         $choice = Read-Host $langStrings.promptChoice
-        
         switch ($choice) {
             "1" { Add-WindowsUpdates }
             "2" { Add-Drivers }
@@ -1247,7 +1128,7 @@ if ($script:runMode -eq 'MANUAL') {
             "7" { Export-Configuration }
             "8" { Complete-Image; $choice = "exit" }
             "9" { Cleanup; $choice = "exit" }
-            default {	
+            default {
                 Write-Host $langStrings.invalidChoice -ForegroundColor Red
                 Start-Sleep -Seconds 2
             }

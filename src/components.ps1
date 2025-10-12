@@ -1,42 +1,38 @@
-﻿# Bu dosya, Configure-ComponentsAndServices fonksiyonu tarafından kullanılacak olan tüm bileşen ve servis ayar tanımlarını içerir.
-#
-# ÇOKLU DİL DESTEĞİ:
-# Her ayarın açıklaması, dil koduna özel bir özellikle (`Description_tr`, `Description_en` gibi) saklanmalıdır.
-# Ana script, kullanıcının seçtiği dile göre doğru açıklamayı otomatik olarak seçecektir.
-# Yeni bir dil (örneğin Japonca, 'ja') eklemek için, her nesneye 'Description_ja' özelliğini eklemeniz yeterlidir.
+﻿# Define all component tweaks with their IDs, descriptions in Turkish and English, types, and relevant feature or service names
+# Note: This script creates an array of custom objects representing each tweak
 
 $allComponentTweaks = @(
     [PSCustomObject]@{ 
         ID = 'RemoveIE'; 
-        Description_tr = "Internet Explorer'i Kaldir (Eski bilesenleri temizler)"; 
+        Description_tr = "Internet Explorer'i Kaldır (Eski bileşenleri temizler)"; 
         Description_en = "Remove Internet Explorer (Cleans up old components)"; 
         Type = 'Component'; 
         FeatureName = 'Internet-Explorer-Optional-amd64' 
     },
     [PSCustomObject]@{ 
         ID = 'RemoveWMP'; 
-        Description_tr = "Windows Media Player'i Kaldir (Eski medya oynaticiyi kaldirir)"; 
+        Description_tr = "Windows Media Player'i Kaldır (Eski medya oynatıcıyı kaldırır)"; 
         Description_en = "Remove Windows Media Player (Removes legacy media player)"; 
         Type = 'Component'; 
         FeatureName = 'WindowsMediaPlayer' 
     },
     [PSCustomObject]@{ 
         ID = 'DisableTelemetry'; 
-        Description_tr = "Telemetri Servislerini Devre Disi Birak (Microsoft'a veri gonderimini engeller)"; 
+        Description_tr = "Telemetri Servislerini Devre Dışı Bırak (Microsoft'a veri göndermesini engeller)"; 
         Description_en = "Disable Telemetry Services (Prevents data sending to Microsoft)"; 
         Type = 'Service'; 
         ServiceNames = @('DiagTrack', 'dmwappushservice') 
     },
     [PSCustomObject]@{ 
         ID = 'DisableWerSvc'; 
-        Description_tr = "Hata Raporlama Servisini Devre Disi Birak (Sorun raporlarini gondermeyi durdurur)"; 
+        Description_tr = "Hata Raporlama Servisini Devre Dışı Bırak (Sorun raporlarını göndermeyi durdurur)"; 
         Description_en = "Disable Error Reporting Service (Stops sending problem reports)"; 
         Type = 'Service'; 
         ServiceNames = @('WerSvc') 
     },
     [PSCustomObject]@{ 
         ID = 'DisableFax'; 
-        Description_tr = "Fax Servisini Devre Disi Birak (Gereksiz faks ozelligini kapatir)"; 
+        Description_tr = "Fax Servisini Devre Dışı Bırak (Gereksiz faks özelliğini kapatır)"; 
         Description_en = "Disable Fax Service (Turns off unnecessary fax feature)"; 
         Type = 'Service'; 
         ServiceNames = @('Fax') 

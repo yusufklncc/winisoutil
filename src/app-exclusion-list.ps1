@@ -1,6 +1,6 @@
-﻿# Bu dosya, Remove-WindowsApps fonksiyonu tarafından kullanılacak olan ve
-# kaldırılmaması gereken kritik uygulama paketlerinin bir listesini içerir.
-# Liste, joker karakter (*) kullanımını destekler.
+﻿# Define a list of applications to exclude from removal during system cleanup
+# Note: The asterisk (*) acts as a wildcard to match any version of the application
+# This script creates an array of strings representing each application to be excluded
 
 $appExclusionList = @(
     "Microsoft.ApplicationCompatibilityEnhancements*",

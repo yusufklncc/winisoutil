@@ -1,8 +1,7 @@
-﻿# Bu dosya, Enable-Features fonksiyonu tarafından kullanılacak olan tüm özellik tanımlarını içerir.
-#
-# ÇOKLU DİL DESTEĞİ:
-# Her özelliğin adı, dil koduna özel bir özellikle (`Name_tr`, `Name_en` gibi) saklanmalıdır.
-# Ana script, kullanıcının seçtiği dile göre doğru adı otomatik olarak seçecektir.
+﻿# Define all Windows features with their names in Turkish and English, feature names, and source paths if applicable
+# Note: Adjust the Source paths as necessary for your environment
+# Example source path: "C:\temp_iso\sources\sxs"
+# This script creates an array of custom objects representing each feature
 
 $allFeatures = @(
     [PSCustomObject]@{ 
@@ -12,13 +11,13 @@ $allFeatures = @(
         Source = "C:\temp_iso\sources\sxs" 
     },
     [PSCustomObject]@{ 
-        Name_tr = ".NET Framework 4.8 Advanced Services"; 
+        Name_tr = ".NET Framework 4.8 Gelişmiş Servisler"; 
         Name_en = ".NET Framework 4.8 Advanced Services"; 
         FeatureName = "NetFx4-AdvSrvs"; 
         Source = "C:\temp_iso\sources\sxs" 
     },
     [PSCustomObject]@{ 
-        Name_tr = "Telnet Istemcisi"; 
+        Name_tr = "Telnet İstemcisi"; 
         Name_en = "Telnet Client"; 
         FeatureName = "TelnetClient"; 
         Source = $null 
