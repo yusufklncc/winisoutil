@@ -49,6 +49,9 @@ $allTweaks = @(
             Set-ItemProperty -Path 'Registry::HKU\TEMP\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\TaskbarDeveloperSettings' -Name 'TaskbarEndTask' -Value 1 -Type DWord -Force
             New-Item -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Dsh' -Force -ErrorAction SilentlyContinue | Out-Null
             Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Dsh' -Name 'AllowNewsAndInterests' -Value 0 -Type DWord -Force
+            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\Explorer' -Name 'NoPinningStoreToTaskbar' -Value 1 -Type DWord -Force
+            Set-ItemProperty -Path 'Registry::HKU\TEMP\Software\Policies\Microsoft\Windows\Explorer' -Name 'NoPinningStoreToTaskbar' -Value 1 -Type DWord -Force
+
         }
     },
     [PSCustomObject]@{ 
