@@ -914,7 +914,7 @@ function Enable-Features {
     if ($script:runMode -ne 'AUTOMATIC') { Suspend-Script }
 }
 
-# Commits all changes to the image and creates the final bootable ISO file.
+# Commits all changes, optimizes ALL WIM indexes, and creates the final bootable ISO file.
 function Complete-Image {
     Remove-Item -Path "C:\mount\dism.log" -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 3
@@ -928,7 +928,53 @@ function Complete-Image {
         Write-ColorText ($langStrings.completeSaveError -f $_) $Red
         throw $langStrings.completeFinalizeFail
     }
+
+    # --- WIM Optimization Step (Handles Multiple Indexes) ---
+    try {
+        $sourceWim = "C:\temp_iso\sources\install.wim"
+        $optimizedWim = "C:\temp_iso\sources\install_optimized.wim"
+
+        # Step 1: Get all current indexes from the source WIM file.
+        Write-Host "Getting image indexes from $sourceWim..." -ForegroundColor Cyan
+        $imageInfo = & $global:dismPath /Get-ImageInfo /ImageFile:$sourceWim
+        
+        # Parse the output to find all lines starting with "Index :" and extract the number.
+        $indexes = $imageInfo | Where-Object { $_ -match "^\s*Index : \d+\s*$" } | ForEach-Object { ($_ -split ":")[1].Trim() }
+
+        if ($indexes.Count -eq 0) {
+            throw "No image indexes were found in the source WIM file. Skipping optimization."
+        }
+
+        Write-Host ("Found {0} image index(es) to export: {1}" -f $indexes.Count, ($indexes -join ', ')) -ForegroundColor Green
+
+        # Step 2: Loop through each found index and export it to the new WIM file.
+        # DISM automatically appends subsequent indexes to the destination file.
+        $exportScriptBlock = {
+            foreach ($index in $using:indexes) {
+                Write-Host ("Exporting index {0}..." -f $index)
+                & $using:global:dismPath /Export-Image /SourceImageFile:$using:sourceWim /SourceIndex:$index /DestinationImageFile:$using:optimizedWim /Compress:maximum
+                if ($LASTEXITCODE -ne 0) { throw ("WIM optimization failed on index $index with exit code: $LASTEXITCODE") }
+            }
+        }
+        Invoke-LongRunningOperation -ScriptBlock $exportScriptBlock -Message "Optimizing WIM image(s) to reduce file size..."
+
+        # Step 3: Replace the old WIM with the new, optimized one.
+        Write-Host "Replacing original WIM with the optimized version." -ForegroundColor Cyan
+        Remove-Item -Path $sourceWim -Force
+        Rename-Item -Path $optimizedWim -NewName "install.wim"
+
+    } catch {
+        Write-ColorText ("An error occurred during WIM optimization: $_") $Red
+        Write-ColorText "The original (unoptimized) WIM file will be used." $Yellow
+        # If optimization fails, ensure a partially created optimized file is cleaned up.
+        if (Test-Path $optimizedWim) {
+            Remove-Item -Path $optimizedWim -Force
+        }
+    }
+    # --- End of Optimization Block ---
+
     Write-ColorText $langStrings.completeCreatingIso $Green
+    # ... (The rest of your ISO creation code remains the same) ...
     $isoTool = Get-IsoTool
     if (-not $isoTool) {
         Write-ColorText $langStrings.completeToolNotFound $Red
@@ -950,11 +996,9 @@ function Complete-Image {
     Write-Host ($langStrings.completeOutputIsoPath -f $outputIso) -ForegroundColor Green
     try {
         if ($isoTool.Tool -eq 'oscdimg') {
-            # oscdimg requires a specific bootdata string for dual boot (BIOS + UEFI).
             $bootData = '2#p0,e,bC:\temp_iso\boot\etfsboot.com#pEF,e,bC:\temp_iso\efi\microsoft\boot\efisys.bin'
             & $isoTool.Path -m -o -u2 -udfver102 -bootdata:$bootData C:\temp_iso $outputIso
         } else {
-            # mkisofs uses different parameters for the same dual boot setup.
             & $isoTool.Path -iso-level 4 -l -r -J -joliet-long -no-emul-boot -boot-load-size 8 -b "boot/etfsboot.com" -c "boot/boot.catalog" -eltorito-alt-boot -no-emul-boot -eltorito-boot "efi/microsoft/boot/efisys.bin" -o $outputIso "C:\temp_iso"
         }
         Write-ColorText ($langStrings.completeIsoSuccess -f $outputIso) $Green
