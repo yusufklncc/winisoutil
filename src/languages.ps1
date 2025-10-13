@@ -23,16 +23,12 @@ switch ($global:currentLanguage) {
             # Get-UserChoice
             getUserChoiceMultiSelect   = "Birden fazla seçim yapabilirsiniz (örn: 1,3,5), 'tümü' veya 'g' (geri):"
             getUserChoiceSingleSelect  = "Seçiminiz (1-{0} veya 'g')"
-            # Get-IsoTool
-            isoToolOscdimgFound        = "Sistemde kurulu oscdimg.exe bulundu."
-            isoToolMkisofsNotFound     = "Sistemde oscdimg.exe bulunamadı. Alternatif araç (mkisofs) indiriliyor..."
-            isoToolMkisofsExists       = "mkisofs zaten indirilmiş."
-            isoToolDownloadingMkisofs  = "mkisofs.exe indiriliyor..."
-            isoToolDownloadingCygwin   = "cygwin1.dll indiriliyor..."
-            isoToolDownloadSuccess     = "mkisofs başarıyla indirildi."
-            isoToolDownloadError       = "Hata: Alternatif ISO aracı indirilemedi. {0}"
-            isoToolDownloadHelp        = "Lütfen internet bağlantınızı kontrol edin veya Windows ADK'yı yükleyin."
-            isoToolDownloadFail        = "İndirme başarısız oldu."
+            # Get-oscdimg
+            oscdimgFound               = "Gerekli ISO oluşturma aracı bulundu: {0}"
+            oscdimgNotFoundTitle       = "KRİTİK HATA: ISO Oluşturma Aracı (oscdimg.exe) Bulunamadı!"
+            oscdimgNotFoundDesc1       = "Bu script'in çalışması için Microsoft Windows ADK (Değerlendirme ve Dağıtım Seti) gereklidir."
+            oscdimgNotFoundDesc2       = "Lütfen aşağıdaki linkten Windows ADK'yı indirip kurun:"
+            oscdimgNotFoundDesc3       = "Kurulum sırasında 'Deployment Tools' (Dağıtım Araçları) seçeneğini işaretlediğinizden emin olun."
             # Import/Export
             importTitle                = "Kaydedilmiş bir yapılandırma dosyasını içe aktarmak ister misiniz?"
             importDesc                 = "Evet derseniz, işlemler yapılandırma dosyanıza göre otomatik olarak yapılacaktır."
@@ -172,8 +168,6 @@ switch ($global:currentLanguage) {
             featureDefNotFound         = "KRİTİK HATA: feature-definitions.ps1 bulunamadı veya yüklenemedi."
             # Tamamlama
             completeCreatingIso        = "Yeni ISO oluşturuluyor..."
-            completeToolNotFound       = "ISO oluşturma aracı bulunamadı veya indirilemedi. İşlem iptal ediliyor."
-            completeToolNotFoundHelp   = "Değişiklikleriniz C:\temp_iso klasöründe hazır durumda. ISO'yu manuel oluşturabilirsiniz."
             completeSaveFileTitle      = "Çıktı ISO dosyasının kaydedileceği yeri seçin"
             completeOutputCanceled     = "Çıktı yolu seçilmedi. ISO oluşturma iptal edildi."
             completeOutputIsoPath      = "Çıktı ISO dosyası yolu: {0}"
@@ -239,16 +233,12 @@ switch ($global:currentLanguage) {
             # Get-UserChoice
             getUserChoiceMultiSelect   = "You can make multiple selections (e.g., 1,3,5), 'all' or 'g' (back):"
             getUserChoiceSingleSelect  = "Your choice (1-{0} or 'g')"
-            # Get-IsoTool
-            isoToolOscdimgFound        = "Found installed oscdimg.exe."
-            isoToolMkisofsNotFound     = "oscdimg.exe not found. Downloading alternative tool (mkisofs)..."
-            isoToolMkisofsExists       = "mkisofs is already downloaded."
-            isoToolDownloadingMkisofs  = "Downloading mkisofs.exe..."
-            isoToolDownloadingCygwin   = "Downloading cygwin1.dll..."
-            isoToolDownloadSuccess     = "mkisofs downloaded successfully."
-            isoToolDownloadError       = "Error: Could not download the alternative ISO tool. {0}"
-            isoToolDownloadHelp        = "Please check your internet connection or install the Windows ADK."
-            isoToolDownloadFail        = "Download failed."
+            # Get-oscdimg
+            oscdimgFound               = "Required ISO creation tool found: {0}"
+            oscdimgNotFoundTitle       = "CRITICAL ERROR: ISO Creation Tool (oscdimg.exe) Not Found!"
+            oscdimgNotFoundDesc1       = "This script requires the Microsoft Windows ADK (Assessment and Deployment Kit) to function."
+            oscdimgNotFoundDesc2       = "Please download and install the Windows ADK from the following link:"
+            oscdimgNotFoundDesc3       = "During installation, make sure to select the 'Deployment Tools' feature."
             # Import/Export
             importTitle                = "Would you like to import a saved configuration file?"
             importDesc                 = "If yes, operations will be performed automatically based on your configuration file."
@@ -388,8 +378,6 @@ switch ($global:currentLanguage) {
             featureDefNotFound         = "CRITICAL ERROR: feature-definitions.ps1 could not be found or loaded."
             # Completion
             completeCreatingIso        = "Creating new ISO..."
-            completeToolNotFound       = "ISO creation tool not found or could not be downloaded. Operation canceled."
-            completeToolNotFoundHelp   = "Your changes are ready in the C:\temp_iso folder. You can create the ISO manually."
             completeSaveFileTitle      = "Select where to save the output ISO file"
             completeOutputCanceled     = "Output path not selected. ISO creation canceled."
             completeOutputIsoPath      = "Output ISO file path: {0}"

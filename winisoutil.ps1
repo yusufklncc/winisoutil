@@ -128,45 +128,21 @@ function Get-UserChoice {
     }
 }
 
-# Finds the required tool for creating an ISO (oscdimg.exe or mkisofs.exe).
-# If not found, it attempts to download mkisofs from the project's repository.
-function Get-IsoTool {
+# Finds the required oscdimg.exe tool from the Windows ADK.
+function Find-Oscdimg {
     $adkPaths = @(
+        "C:\Program Files (x88)\Windows Kits\11\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg",
         "C:\Program Files (x86)\Windows Kits\11\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg",
         "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg"
     )
     foreach ($path in $adkPaths) {
         $oscdimgPath = Join-Path $path "oscdimg.exe"
         if (Test-Path $oscdimgPath) {
-            Write-ColorText $langStrings.isoToolOscdimgFound $Green
-            return @{ Tool = 'oscdimg'; Path = $oscdimgPath }
+            Write-ColorText ($langStrings.oscdimgFound -f $oscdimgPath) $Green
+            return $oscdimgPath
         }
     }
-    Write-ColorText $langStrings.isoToolMkisofsNotFound $Yellow
-    $toolsDir = Join-Path $env:TEMP "WinIsoTools"
-    $mkisofsPath = Join-Path $toolsDir "mkisofs.exe"
-    if (Test-Path $mkisofsPath) {
-        Write-ColorText $langStrings.isoToolMkisofsExists $Green
-        return @{ Tool = 'mkisofs'; Path = $mkisofsPath }
-    }
-    try {
-        New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null
-        $repoUrl = "https://raw.githubusercontent.com/yusufklncc/winisoutil/main/tools"
-        Write-ColorText $langStrings.isoToolDownloadingMkisofs $Cyan
-        Invoke-WebRequest -Uri "$repoUrl/mkisofs.exe" -OutFile $mkisofsPath
-        Write-ColorText $langStrings.isoToolDownloadingCygwin $Cyan
-        Invoke-WebRequest -Uri "$repoUrl/cygwin1.dll" -OutFile (Join-Path $toolsDir "cygwin1.dll")
-        if (Test-Path $mkisofsPath) {
-            Write-ColorText $langStrings.isoToolDownloadSuccess $Green
-            return @{ Tool = 'mkisofs'; Path = $mkisofsPath }
-        } else {
-            throw $langStrings.isoToolDownloadFail
-        }
-    } catch {
-        Write-ColorText ($langStrings.isoToolDownloadError -f $_) $Red
-        Write-ColorText $langStrings.isoToolDownloadHelp $Yellow
-        return $null
-    }
+    return $null
 }
 
 # Asks the user if they want to import settings from a .json file to run in automatic mode.
@@ -933,22 +909,15 @@ function Complete-Image {
     try {
         $sourceWim = "C:\temp_iso\sources\install.wim"
         $optimizedWim = "C:\temp_iso\sources\install_optimized.wim"
-
-        # Step 1: Get all current indexes from the source WIM file.
         Write-Host "Getting image indexes from $sourceWim..." -ForegroundColor Cyan
         $imageInfo = & $global:dismPath /Get-ImageInfo /ImageFile:$sourceWim
-        
-        # Parse the output to find all lines starting with "Index :" and extract the number.
         $indexes = $imageInfo | Where-Object { $_ -match "^\s*Index : \d+\s*$" } | ForEach-Object { ($_ -split ":")[1].Trim() }
 
         if ($indexes.Count -eq 0) {
             throw "No image indexes were found in the source WIM file. Skipping optimization."
         }
-
         Write-Host ("Found {0} image index(es) to export: {1}" -f $indexes.Count, ($indexes -join ', ')) -ForegroundColor Green
-
-        # Step 2: Loop through each found index and export it to the new WIM file.
-        # DISM automatically appends subsequent indexes to the destination file.
+        
         $exportScriptBlock = {
             foreach ($index in $using:indexes) {
                 Write-Host ("Exporting index {0}..." -f $index)
@@ -958,15 +927,12 @@ function Complete-Image {
         }
         Invoke-LongRunningOperation -ScriptBlock $exportScriptBlock -Message "Optimizing WIM image(s) to reduce file size..."
 
-        # Step 3: Replace the old WIM with the new, optimized one.
         Write-Host "Replacing original WIM with the optimized version." -ForegroundColor Cyan
         Remove-Item -Path $sourceWim -Force
         Rename-Item -Path $optimizedWim -NewName "install.wim"
-
     } catch {
         Write-ColorText ("An error occurred during WIM optimization: $_") $Red
         Write-ColorText "The original (unoptimized) WIM file will be used." $Yellow
-        # If optimization fails, ensure a partially created optimized file is cleaned up.
         if (Test-Path $optimizedWim) {
             Remove-Item -Path $optimizedWim -Force
         }
@@ -974,13 +940,6 @@ function Complete-Image {
     # --- End of Optimization Block ---
 
     Write-ColorText $langStrings.completeCreatingIso $Green
-    # ... (The rest of your ISO creation code remains the same) ...
-    $isoTool = Get-IsoTool
-    if (-not $isoTool) {
-        Write-ColorText $langStrings.completeToolNotFound $Red
-        Write-ColorText $langStrings.completeToolNotFoundHelp $Yellow
-        return
-    }
     Add-Type -AssemblyName System.Windows.Forms
     $SaveFileDialog = New-Object System.Windows.Forms.SaveFileDialog
     $SaveFileDialog.Title = $langStrings.completeSaveFileTitle
@@ -995,13 +954,16 @@ function Complete-Image {
     $outputIso = $SaveFileDialog.FileName
     Write-Host ($langStrings.completeOutputIsoPath -f $outputIso) -ForegroundColor Green
     try {
-        if ($isoTool.Tool -eq 'oscdimg') {
-            $bootData = '2#p0,e,bC:\temp_iso\boot\etfsboot.com#pEF,e,bC:\temp_iso\efi\microsoft\boot\efisys.bin'
-            & $isoTool.Path -m -o -u2 -udfver102 -bootdata:$bootData C:\temp_iso $outputIso
-        } else {
-            Set-Location -Path "C:\temp_iso"
-            & $isoTool.Path -iso-level 4 -l -r -J -joliet-long -no-emul-boot -boot-load-size 8 -b "boot/etfsboot.com" -c "boot/boot.catalog" -eltorito-alt-boot -no-emul-boot -eltorito-boot "efi/microsoft/boot/efisys.bin" -o $outputIso "C:\temp_iso"
+        # oscdimg.exe için önyükleme verisi argümanı
+        $bootData = '2#p0,e,bC:\temp_iso\boot\etfsboot.com#pEF,e,bC:\temp_iso\efi\microsoft\boot\efisys.bin'
+        
+        # Doğrudan $global:oscdimgPath değişkenini kullanarak ISO oluşturma
+        & $global:oscdimgPath -m -o -u2 -udfver102 -bootdata:$bootData C:\temp_iso $outputIso
+        
+        if ($LASTEXITCODE -ne 0) {
+            throw ($langStrings.completeIsoError -f "oscdimg Exit Code: $LASTEXITCODE")
         }
+        
         Write-ColorText ($langStrings.completeIsoSuccess -f $outputIso) $Green
         Cleanup
     } catch {
@@ -1068,6 +1030,20 @@ if (-not $global:dismPath) {
     Write-ColorText $langStrings.dismNotFoundExit $Red
     exit 1
 }
+
+$global:oscdimgPath = Find-Oscdimg
+if (-not $global:oscdimgPath) {
+    Show-Banner
+    Write-ColorText $langStrings.oscdimgNotFoundTitle $Red
+    Write-ColorText "----------------------------------------------------------------" $Yellow
+    Write-ColorText $langStrings.oscdimgNotFoundDesc1 $Cyan
+    Write-ColorText $langStrings.oscdimgNotFoundDesc2 $Cyan
+    Write-ColorText "https://learn.microsoft.com/tr-tr/windows-hardware/get-started/adk-install" $White
+    Write-ColorText $langStrings.oscdimgNotFoundDesc3 $Cyan
+    Write-ColorText "----------------------------------------------------------------" $Yellow
+    Read-Host; exit 1
+}
+
 Show-Banner
 
 # 4. Check for Administrator privileges.
