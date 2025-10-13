@@ -28,7 +28,7 @@ switch ($global:currentLanguage) {
             oscdimgNotFoundTitle       = "KRİTİK HATA: ISO Oluşturma Aracı (oscdimg.exe) Bulunamadı!"
             oscdimgNotFoundDesc1       = "Bu script'in çalışması için Microsoft Windows ADK (Değerlendirme ve Dağıtım Seti) gereklidir."
             oscdimgNotFoundDesc2       = "Lütfen aşağıdaki linkten Windows ADK'yı indirip kurun:"
-            oscdimgNotFoundDesc3       = "Kurulum sırasında 'Deployment Tools' (Dağıtım Araçları) seçeneğini işaretlediğinizden emin olun."
+            oscdimgNotFoundDesc3       = "Kurulum sırasında sadece 'Deployment Tools' (Dağıtım Araçları) seçeneğini işaretlemeniz yeterlidir."
             # Import/Export
             importTitle                = "Kaydedilmiş bir yapılandırma dosyasını içe aktarmak ister misiniz?"
             importDesc                 = "Evet derseniz, işlemler yapılandırma dosyanıza göre otomatik olarak yapılacaktır."
@@ -238,7 +238,7 @@ switch ($global:currentLanguage) {
             oscdimgNotFoundTitle       = "CRITICAL ERROR: ISO Creation Tool (oscdimg.exe) Not Found!"
             oscdimgNotFoundDesc1       = "This script requires the Microsoft Windows ADK (Assessment and Deployment Kit) to function."
             oscdimgNotFoundDesc2       = "Please download and install the Windows ADK from the following link:"
-            oscdimgNotFoundDesc3       = "During installation, make sure to select the 'Deployment Tools' feature."
+            oscdimgNotFoundDesc3       = "During installation, you only need to select the 'Deployment Tools' feature."
             # Import/Export
             importTitle                = "Would you like to import a saved configuration file?"
             importDesc                 = "If yes, operations will be performed automatically based on your configuration file."
