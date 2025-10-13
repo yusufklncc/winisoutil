@@ -999,6 +999,7 @@ function Complete-Image {
             $bootData = '2#p0,e,bC:\temp_iso\boot\etfsboot.com#pEF,e,bC:\temp_iso\efi\microsoft\boot\efisys.bin'
             & $isoTool.Path -m -o -u2 -udfver102 -bootdata:$bootData C:\temp_iso $outputIso
         } else {
+            Set-Location -Path "C:\temp_iso"
             & $isoTool.Path -iso-level 4 -l -r -J -joliet-long -no-emul-boot -boot-load-size 8 -b "boot/etfsboot.com" -c "boot/boot.catalog" -eltorito-alt-boot -no-emul-boot -eltorito-boot "efi/microsoft/boot/efisys.bin" -o $outputIso "C:\temp_iso"
         }
         Write-ColorText ($langStrings.completeIsoSuccess -f $outputIso) $Green
