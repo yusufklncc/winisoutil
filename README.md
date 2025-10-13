@@ -26,31 +26,30 @@ This tool features both an interactive menu-driven **Manual Mode** and an **Auto
   - **Privacy and Telemetry**: Disable data collection and error reporting services.
   - **UI Tweaks**: Align the taskbar to the left, configure desktop icons, and tweak File Explorer.
   - **Component Removal**: Remove legacy components like Internet Explorer and Windows Media Player.
-- **Reliability**:
+- **Reliability and Dependency Management**:
   - A `trap` mechanism ensures a safe exit and cleanup if an error occurs, preventing a "dirty" state (like a mounted image).
-  - Automatically downloads necessary tools (`mkisofs.exe`) from the project's repository if they are not found locally.
+  - The script automatically checks for the required **Windows ADK**. If it's not found, it provides clear instructions for the user to install it.
 
 ---
 
 ## 🚀 Quick Start
 
-To use this tool, simply open a **Terminal** window and run the following command. This will download and execute the bootstrapper script, which handles the setup for you.
+To use this tool, open a **Terminal** or **PowerShell** window and run the following command. This will download and execute the bootstrapper script, which handles the setup for you.
 
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process -Force; irm https://raw.githubusercontent.com/yusufklncc/winisoutil/refs/heads/main/install.ps1 | iex
 ```
 
----
-
 ## ⚙️ Usage and Workflow
 
-1.  The script first checks for Administrator privileges.
+1.  The bootstrapper script first requests Administrator privileges.
 2.  It downloads all necessary project files from GitHub to a temporary directory.
 3.  The main script, `winisoutil.ps1`, is launched.
-4.  You will first be prompted to select a language.
-5.  A file selection window will open for you to choose the Windows ISO file you want to edit.
-6.  The ISO is mounted, its contents are copied to `C:\temp_iso`, and the image inside `install.wim` is mounted to `C:\mount`.
-7.  The main menu appears, allowing you to proceed with your desired customizations.
+4.  You will be prompted to select a language.
+5.  The script verifies that all requirements (like the Windows ADK) are met before proceeding.
+6.  A file selection window will open for you to choose the Windows ISO file you want to edit.
+7.  The ISO is mounted, its contents are copied to `C:\temp_iso`, and the image inside `install.wim` is mounted to `C:\mount`.
+8.  The main menu appears, allowing you to proceed with your desired customizations.
 
 ---
 
@@ -86,7 +85,9 @@ The project is designed to be modular. You can easily add or modify customizatio
 - Windows 10 or Windows 11
 - PowerShell 5.1+
 - Administrator privileges to run
-- Internet connection (for the initial download)
+- Internet connection (for the initial download of the script)
+- **Windows ADK**: The [Windows Assessment and Deployment Kit (ADK)](https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install) must be installed.
+  - During the ADK setup, you only need to select the **"Deployment Tools"** feature, which includes the necessary `oscdimg.exe` for creating the final ISO file.
 
 ---
 
