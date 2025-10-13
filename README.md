@@ -34,7 +34,7 @@ This tool features both an interactive menu-driven **Manual Mode** and an **Auto
 
 ## 🚀 Quick Start
 
-To use this tool, simply open a **PowerShell** window **as an Administrator** and run the following command. This will download and execute the bootstrapper script, which handles the setup for you.
+To use this tool, simply open a **Terminal** window and run the following command. This will download and execute the bootstrapper script, which handles the setup for you.
 
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process -Force; irm https://raw.githubusercontent.com/yusufklncc/winisoutil/refs/heads/main/install.ps1 | iex
@@ -47,7 +47,7 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; irm https://raw.githubusercont
 1.  The script first checks for Administrator privileges.
 2.  It downloads all necessary project files from GitHub to a temporary directory.
 3.  The main script, `winisoutil.ps1`, is launched.
-4.  You will first be prompted to select a language (Turkish/English).
+4.  You will first be prompted to select a language.
 5.  A file selection window will open for you to choose the Windows ISO file you want to edit.
 6.  The ISO is mounted, its contents are copied to `C:\temp_iso`, and the image inside `install.wim` is mounted to `C:\mount`.
 7.  The main menu appears, allowing you to proceed with your desired customizations.
