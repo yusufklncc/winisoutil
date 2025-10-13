@@ -1,3 +1,5 @@
+[English](README.md) | [Türkçe](README.tr.md)
+
 # WinISOUtil - Windows ISO Customization Tool
 
 ![Windows 11](https://img.shields.io/badge/Windows-11-0078D6?style=for-the-badge&logo=windows11)
