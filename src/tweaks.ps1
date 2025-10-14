@@ -229,6 +229,7 @@ $allTweaks = @(
         Code = {
             $path = 'Registry::HKLM\TEMP\Microsoft\Windows\CurrentVersion\OOBE'
             Set-ItemProperty -Path $path -Name 'BypassNRO' -Value 1 -Type DWord -Force
+            Set-ItemProperty -Path $path -Name 'HideOnlineAccountScreens' -Value 1 -Type DWord -Force
         }
     },
     [PSCustomObject]@{ 
