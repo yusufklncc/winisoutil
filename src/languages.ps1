@@ -182,6 +182,19 @@ switch ($global:currentLanguage) {
             cleanupCleaning            = "Geçici dosyalar ve klasörler temizleniyor..."
             cleanupImageMounted        = "Hala mount edilmiş bir imaj var, değişiklikler iptal ediliyor..."
             cleanupComplete            = "Temizlik tamamlandı!"
+            # Performans Ayarları Menüsü için yeni eklenenler
+            perfMenuTitle              = "Performans ve Gelişmiş Ayarlar Menüsü"
+            perfCurrentSelections      = "Şu anki performans seçimleriniz:"
+            perfSelectAll              = "TÜM PERFORMANS AYARLARINI SEÇ/KALDIR"
+            perfGoBackAndApply         = "[g] Geri (Ana Menüye Dön ve Seçimleri Uygula)"
+            perfPrompt                 = "Seçiminiz (Birden fazla seçim için virgülle ayırın, örn: 1,3)"
+            perfAllSelectionsRemoved   = "Tüm performans seçimleri kaldırıldı."
+            perfAllSelectionsAdded     = "Tüm performans ayarları seçildi."
+            perfItemRemoved            = "'{0}' seçimlerden kaldırıldı."
+            perfItemAdded              = "'{0}' seçimlere eklendi."
+            perfNothingSelected        = "Uygulanacak performans ayarı seçilmedi."
+            perfApplying               = "Performans ayarı uygulanıyor: {0}"
+            perfReturnToMenu           = "Ana menüye dönmek için herhangi bir tuşa basın..."
             # Script Başlangıcı
             langPrompt                 = "Lütfen bir dil seçin / Please select a language"
             scriptNotAdmin             = "Bu script yönetici olarak çalıştırılmalıdır!"
@@ -209,6 +222,7 @@ switch ($global:currentLanguage) {
             mainMenu7                  = "7. Ayarları Dışa Aktar (.json)"
             mainMenu8                  = "8. Değişiklikleri Kaydet ve ISO Oluştur"
             mainMenu9                  = "9. Değişiklikleri Kaydetme ve Çık"
+            mainMenu10                 = "10. Performans ve Gelişmiş Ayarlar"
             # Bitiş
             finishMessage              = "İşlem tamamlandı. Çıkmak için herhangi bir tuşa basın..."
         }
@@ -392,6 +406,19 @@ switch ($global:currentLanguage) {
             cleanupCleaning            = "Cleaning up temporary files and folders..."
             cleanupImageMounted        = "There is still a mounted image, discarding changes..."
             cleanupComplete            = "Cleanup complete!"
+            # Newly added for Performance Tweaks Menu
+            perfMenuTitle              = "Performance & Advanced Tweaks Menu"
+            perfCurrentSelections      = "Your current performance selections:"
+            perfSelectAll              = "SELECT/DESELECT ALL PERFORMANCE TWEAKS"
+            perfGoBackAndApply         = "[g] Back (Return to Main Menu and Apply Selections)"
+            perfPrompt                 = "Your choice (separate multiple choices with a comma, e.g., 1,3)"
+            perfAllSelectionsRemoved   = "All performance selections have been removed."
+            perfAllSelectionsAdded     = "All performance tweaks have been selected."
+            perfItemRemoved            = "'{0}' removed from selections."
+            perfItemAdded              = "'{0}' added to selections."
+            perfNothingSelected        = "No performance tweak selected to apply."
+            perfApplying               = "Applying performance tweak: {0}"
+            perfReturnToMenu           = "Press any key to return to the main menu..."
             # Script Start
             langPrompt                 = "Please select a language / Lutfen bir dil secin"
             scriptNotAdmin             = "This script must be run as an administrator!"
@@ -419,6 +446,7 @@ switch ($global:currentLanguage) {
             mainMenu7                  = "7. Export Settings (.json)"
             mainMenu8                  = "8. Save Changes and Create ISO"
             mainMenu9                  = "9. Exit Without Saving Changes"
+            mainMenu10                 = "10. Performance & Advanced Tweaks"
             # Finish
             finishMessage              = "Operation completed. Press any key to exit..."
         }
