@@ -163,7 +163,7 @@ switch ($global:currentLanguage) {
             tweak_DisableEdgeContentFeatures_desc    = "Edge'deki alışveriş asistanı, MSN haberleri ve diğer içerik özelliklerini kapat"
             tweak_DisableSystemPerformanceTweaks_desc= "Performans ve tepki süresi için sistem ayarları yap"
             tweak_ConfigureCrashControl_desc         = "Mavi ekran (BSOD) ayarlarını yapılandır (Otomatik yeniden başlatmayı kapat)"
-            tweak_DisableSecurityRisks_desc          = "Potansiyel güvenlik risklerini azalt (WPBT, Uzaktan Yardım)"
+            tweak_DisableWPBT_desc                  = "WPBT'yi devre dışı bırakarak OEM bloatware'ini engelle"
             tweak_EnableRestartApps_desc             = "Yeniden başlatırken uygulamaları otomatik olarak geri yükle"
             tweak_ForceOfflineAccount_desc           = "Kurulumda çevrimdışı (yerel) hesap kullanmaya zorla (OOBE)"
             tweak_DisableStickyKeys_desc             = "Yapışkan Tuşlar uyarılarını devre dışı bırak"
@@ -171,7 +171,6 @@ switch ($global:currentLanguage) {
             tweak_DisableEdgeShortcut_desc           = "Microsoft Edge otomatik masaüstü kısayolu oluşturmayı devre dışı bırak"
             tweak_DisableStoreAutoUpdate_desc        = "Microsoft Store uygulama güncellemelerini kapat"
             tweak_DisableOneDriveSetup_desc          = "OneDrive'in başlangıçta otomatik çalışmasını engelle"
-            tweak_DisableErrorReporting_desc         = "Windows Hata Raporlamasını Kapat (Gizlilik ve Stabilite)"
             tweak_DisableOfficeTelemetry_desc        = "Microsoft Office Telemetrisini Kapat (Gizlilik)"
             # Uygulama Kaldırma
             appRemoveGettingList       = "ISO içindeki kurulu uygulamaların listesi alınıyor. Bu işlem biraz sürebilir..."
@@ -198,6 +197,10 @@ switch ($global:currentLanguage) {
             featureEnableSuccess       = "{0} başarıyla etkinleştirildi."
             featureEnableError         = "Hata: {0} etkinleştirilemedi. {1}"
             featureDefNotFound         = "KRİTİK HATA: features.ps1 bulunamadı veya yüklenemedi."
+            # Feature Açıklamaları
+            feature_NetFx3_desc                = ".NET Framework 3.5 (2 ve 3 dahil)"
+            'feature_NetFx4-AdvSrvs_desc'      = ".NET Framework 4.8 Gelişmiş Servisler"
+            feature_TelnetClient_desc          = "Telnet İstemcisi"
             # Tamamlama
             completeCreatingIso        = "Yeni ISO oluşturuluyor..."
             completeSaveFileTitle      = "Çıktı ISO dosyasının kaydedileceği yeri seçin"
@@ -405,7 +408,7 @@ switch ($global:currentLanguage) {
             tweak_DisableEdgeContentFeatures_desc    = "Disable shopping assistant, MSN news, and other content features in Edge"
             tweak_DisableSystemPerformanceTweaks_desc= "Apply system tweaks for performance and responsiveness"
             tweak_ConfigureCrashControl_desc         = "Configure crash control (BSOD) settings (Disable auto-reboot)"
-            tweak_DisableSecurityRisks_desc          = "Mitigate potential security risks (WPBT, Remote Assistance)"
+            tweak_DisableWPBT_desc                   = "Disable WPBT to prevent OEM bloatware execution"
             tweak_EnableRestartApps_desc             = "Automatically restore apps on restart"
             tweak_ForceOfflineAccount_desc           = "Force using an offline (local) account during setup (OOBE)"
             tweak_DisableStickyKeys_desc             = "Disable Sticky Keys prompts"
@@ -413,7 +416,6 @@ switch ($global:currentLanguage) {
             tweak_DisableEdgeShortcut_desc           = "Disable automatic Microsoft Edge desktop shortcut creation"
             tweak_DisableStoreAutoUpdate_desc        = "Disable Microsoft Store automatic app updates"
             tweak_DisableOneDriveSetup_desc          = "Prevent OneDrive from running automatically at startup"
-            tweak_DisableErrorReporting_desc         = "Disable Windows Error Reporting (Privacy and Stability)"
             tweak_DisableOfficeTelemetry_desc        = "Disable Microsoft Office Telemetry (Privacy)"
             # App Removal
             appRemoveGettingList       = "Getting the list of installed apps inside the ISO. This might take a moment..."
@@ -440,6 +442,10 @@ switch ($global:currentLanguage) {
             featureEnableSuccess       = "Successfully enabled {0}."
             featureEnableError         = "Error: Could not enable {0}. {1}"
             featureDefNotFound         = "CRITICAL ERROR: feature-definitions.ps1 could not be found or loaded."
+            # Feature Descriptions
+            feature_NetFx3_desc                = ".NET Framework 3.5 (includes 2 and 3)"
+            'feature_NetFx4-AdvSrvs_desc'      = ".NET Framework 4.8 Advanced Services"
+            feature_TelnetClient_desc          = "Telnet Client"
             # Completion
             completeCreatingIso        = "Creating new ISO..."
             completeSaveFileTitle      = "Select where to save the output ISO file"
