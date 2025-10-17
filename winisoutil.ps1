@@ -561,7 +561,7 @@ function Set-Registry {
         return
     }
 
-    $finalSetupScript = "[System.Threading.Thread]::Sleep(5000); try { Remove-Item -Path 'Registry::HKCU\Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\Cache\DefaultAccount' -Recurse -Force; Remove-Item -Path 'C:\Windows.old' -Recurse -Force; Stop-Process -Name explorer -Force } catch {}"
+    $finalSetupScript = "[System.Threading.Thread]::Sleep(5000); try { Remove-Item -Path 'C:\Windows.old' -Recurse -Force; Stop-Process -Name explorer -Force } catch {}"
     $tweaksToApply = [System.Collections.Generic.List[object]]::new()
     
     if ($script:runMode -eq 'AUTOMATIC') {
@@ -828,19 +828,21 @@ function Enable-Features {
         Suspend-Script
         return
     }
-    $nameProperty = "Name_" + $global:currentLanguage
-    if ($allFeatures -and -not ($allFeatures[0].PSObject.Properties.Name -contains $nameProperty)) {
-        $nameProperty = "Name_en" # Fallback to English.
-    }
+
     $featuresToEnable = [System.Collections.Generic.List[object]]::new()
+    
+    # Decide whether to run in automatic or manual mode
     if ($script:runMode -eq 'AUTOMATIC' -and $global:ScriptConfig.EnabledFeatures.Count -gt 0) {
         Write-ColorText $langStrings.featureEnableFromConfig $Cyan
         $selectedFeatureIDs = $global:ScriptConfig.EnabledFeatures
         $featuresToEnable.AddRange(($allFeatures | Where-Object { $selectedFeatureIDs -contains $_.FeatureName }))
-    } else {
-        $menuOptions = ($allFeatures | ForEach-Object { $_.$nameProperty }) + $langStrings.featureEnableApplyAll
+    } else { # Manual mode
+        # Build menu options by fetching descriptions from the language file
+        $menuOptions = ($allFeatures | ForEach-Object { $global:langStrings["feature_$($_.FeatureName)_desc"] }) + $langStrings.featureEnableApplyAll
         $selection = Get-UserChoice -Title $langStrings.featureEnableTitle -Options $menuOptions -MultiSelect $true
+        
         if ($selection -eq 'go_back' -or !$selection) { return }
+
         if ($selection -contains $menuOptions.Length) {
             $featuresToEnable.AddRange($allFeatures)
         } else {
@@ -848,6 +850,7 @@ function Enable-Features {
         }
         $global:ScriptConfig.EnabledFeatures = $featuresToEnable.FeatureName
     }
+
     if ($featuresToEnable.Count -eq 0) {
         if ($script:runMode -eq 'MANUAL') {
             Write-ColorText $langStrings.featureEnableNothingSelect $Yellow
@@ -855,20 +858,39 @@ function Enable-Features {
         }
         return
     }
+
     foreach ($feature in $featuresToEnable) {
-        $featureNameDisplay = $feature.$nameProperty
+        # Get the localized display name for the feature from the language file
+        $featureNameDisplay = $global:langStrings["feature_$($feature.FeatureName)_desc"]
         Write-ColorText ($langStrings.featureEnableEnabling -f $featureNameDisplay) $Green
+        
         try {
             $dismParams = @("/Image:C:\mount", "/Enable-Feature", "/FeatureName:$($feature.FeatureName)", "/All")
             if ($feature.Source) {
                 $dismParams += @("/LimitAccess", "/Source:$($feature.Source)")
             }
-            & $global:dismPath $dismParams
-            Write-ColorText ($langStrings.featureEnableSuccess -f $featureNameDisplay) $Green
+            
+            # Execute DISM and capture all output streams (standard and error)
+            $dismOutput = & $global:dismPath $dismParams 2>&1
+            
+            # Check the exit code of the last external command
+            if ($LASTEXITCODE -eq 0) {
+                Write-ColorText ($langStrings.featureEnableSuccess -f $featureNameDisplay) $Green
+            } else {
+                # If DISM fails, parse the error from its output and throw a proper exception
+                $errorMessage = ($dismOutput | Where-Object { $_ -match "Error:" } | Select-Object -First 1) -replace "Error:", ""
+                if ([string]::IsNullOrWhiteSpace($errorMessage)) {
+                    $errorMessage = "DISM Exit Code: $LASTEXITCODE"
+                }
+                # Throw a custom error that will be caught by the catch block
+                throw ($langStrings.featureEnableError -f $featureNameDisplay, $errorMessage.Trim())
+            }
         } catch {
-            Write-ColorText ($langStrings.featureEnableError -f $featureNameDisplay, $_) $Red
+            # Catch the thrown error and display it in red
+            Write-ColorText $_.Exception.Message $Red
         }
     }
+
     if ($script:runMode -ne 'AUTOMATIC') { Suspend-Script }
 }
 
