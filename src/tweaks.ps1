@@ -29,17 +29,24 @@ $allTweaks = @(
         Code = {
             Set-ItemProperty -Path 'Registry::HKU\TEMP\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'TaskbarAl' -Value 0 -Type DWord -Force
             Set-ItemProperty -Path 'Registry::HKU\TEMP\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'ShowTaskViewButton' -Value 0 -Type DWord -Force
-            Set-ItemProperty -Path 'Registry::HKU\TEMP\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'TaskbarMn' -Value 0 -Type DWord -Force # Disable Chat Icon
+            Set-ItemProperty -Path 'Registry::HKU\TEMP\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'TaskbarMn' -Value 0 -Type DWord -Force
             New-Item -Path 'Registry::HKU\TEMP\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\TaskbarDeveloperSettings' -Force -ErrorAction SilentlyContinue | Out-Null
             Set-ItemProperty -Path 'Registry::HKU\TEMP\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\TaskbarDeveloperSettings' -Name 'TaskbarEndTask' -Value 1 -Type DWord -Force
             New-Item -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Dsh' -Force -ErrorAction SilentlyContinue | Out-Null
             Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Dsh' -Name 'AllowNewsAndInterests' -Value 0 -Type DWord -Force
             New-Item -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\Explorer' -Force -ErrorAction SilentlyContinue | Out-Null
             Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\Explorer' -Name 'NoPinningStoreToTaskbar' -Value 1 -Type DWord -Force
-            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\Explorer' -Name 'HideSCAMeetNow' -Value 1 -Type DWord -Force # Hide Meet Now
+            Set-ItemProperty -Path 'Registry::HKU\TEMP\Software\Policies\Microsoft\Windows\Explorer' -Name 'NoPinningStoreToTaskbar' -Value 1 -Type DWord -Force
+            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\Explorer' -Name 'HideRecommendedSection' -Value 1 -Type DWord -Force
+            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\Explorer' -Name 'HideSCAMeetNow' -Value 1 -Type DWord -Force
             New-Item -Path 'Registry::HKLM\TEMP\SOFTWARE\Policies\Microsoft\Windows\Windows Chat' -Force -ErrorAction SilentlyContinue | Out-Null
             Set-ItemProperty -Path 'Registry::HKLM\TEMP\SOFTWARE\Policies\Microsoft\Windows\Windows Chat' -Name 'ChatIcon' -Value 3 -Type DWord -Force
         }
+    },
+    [PSCustomObject]@{ 
+        ID = 'HideSearchIcon';
+        Action = "SetupScript"; 
+        Code = "try { Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Search' -Name 'SearchboxTaskbarMode' -Value 0 -Type DWord -Force } catch {}"
     },
     [PSCustomObject]@{ 
         ID = 'ConfigureFileExplorer'; 
@@ -63,6 +70,8 @@ $allTweaks = @(
             # Disable Bing Search
             New-Item -Path 'Registry::HKU\TEMP\Software\Microsoft\Windows\CurrentVersion\Search' -Force -ErrorAction SilentlyContinue | Out-Null
             Set-ItemProperty -Path 'Registry::HKU\TEMP\Software\Microsoft\Windows\CurrentVersion\Search' -Name 'BingSearchEnabled' -Value 0 -Type DWord -Force
+            New-Item -Path 'Registry::HKU\TEMP\Software\Policies\Microsoft\Windows\Explorer' -Force -ErrorAction SilentlyContinue | Out-Null
+            Set-ItemProperty -Path 'Registry::HKU\TEMP\Software\Policies\Microsoft\Windows\Explorer' -Name 'DisableSearchBoxSuggestions' -Value 1 -Type DWord -Force
             New-Item -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\Windows Search' -Force -ErrorAction SilentlyContinue | Out-Null
             Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\Windows Search' -Name 'DisableWebSearch' -Value 1 -Type DWord -Force
             
@@ -72,6 +81,9 @@ $allTweaks = @(
             Set-ItemProperty -Path $advPath -Name 'Start_AccountNotifications' -Value 0 -Type DWord -Force
             New-Item -Path 'Registry::HKLM\TEMP\Microsoft\PolicyManager\current\device\Start' -Force -ErrorAction SilentlyContinue | Out-Null
             Set-ItemProperty -Path 'Registry::HKLM\TEMP\Microsoft\PolicyManager\current\device\Start' -Name 'HideRecommendedSection' -Value 1 -Type DWord -Force
+            New-Item -Path 'Registry::HKLM\TEMP\Microsoft\PolicyManager\current\device\Education' -Force -ErrorAction SilentlyContinue | Out-Null
+            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Microsoft\PolicyManager\current\device\Education' -Name 'IsEducationEnvironment' -Value 1 -Type DWord -Force
+
         }
     },
     [PSCustomObject]@{ 
@@ -152,6 +164,15 @@ $allTweaks = @(
             Set-ItemProperty -Path $cloudContentPath -Name 'DisableWindowsConsumerFeatures' -Value 1 -Type DWord -Force
             Set-ItemProperty -Path $cloudContentPath -Name 'DisableSoftLanding' -Value 1 -Type DWord -Force
             Set-ItemProperty -Path $cloudContentPath -Name 'DisableCloudOptimizedContent' -Value 1 -Type DWord -Force
+            $contentDeliveryPath = 'Registry::HKU\TEMP\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
+            Set-ItemProperty -Path $contentDeliveryPath -Name 'SubscribedContent-338387Enabled' -Value 0 -Type DWord -Force
+            Set-ItemProperty -Path $contentDeliveryPath -Name 'SubscribedContent-338389Enabled' -Value 0 -Type DWord -Force
+            Set-ItemProperty -Path $contentDeliveryPath -Name 'SubscribedContent-310093Enabled' -Value 0 -Type DWord -Force
+            Set-ItemProperty -Path $contentDeliveryPath -Name 'SubscribedContent-338388Enabled' -Value 0 -Type DWord -Force
+            Set-ItemProperty -Path $contentDeliveryPath -Name 'OemPreInstalledAppsEnabled' -Value 0 -Type DWord -Force
+            Set-ItemProperty -Path $contentDeliveryPath -Name 'PreInstalledAppsEnabled' -Value 0 -Type DWord -Force
+            Set-ItemProperty -Path $contentDeliveryPath -Name 'PreInstalledAppsEverEnabled' -Value 0 -Type DWord -Force
+            Set-ItemProperty -Path $contentDeliveryPath -Name 'SilentInstalledAppsEnabled' -Value 0 -Type DWord -Force
             Set-ItemProperty -Path 'Registry::HKU\TEMP\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'SettingsPageNotifications' -Value 0 -Type DWord -Force
             New-Item -Path 'Registry::HKU\TEMP\Software\Microsoft\Windows\CurrentVersion\SystemSettings\AccountNotifications' -Force -ErrorAction SilentlyContinue | Out-Null
             Set-ItemProperty -Path 'Registry::HKU\TEMP\Software\Microsoft\Windows\CurrentVersion\SystemSettings\AccountNotifications' -Name 'EnableAccountNotifications' -Value 0 -Type DWord -Force
