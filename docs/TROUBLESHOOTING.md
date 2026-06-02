@@ -111,3 +111,10 @@ Get-PSDrive D
 Do not delete cache files during an active run. Cache cleanup is a separate
 reviewed maintenance operation; final ISO retention does not purge shared
 payloads.
+
+## Inspect Profile Validation
+
+Promoted and verifier-only ISOs receive an `<iso>.validation.json` sibling
+report. Review `FailedChecks`, `NoOpChecks`, and `DeferredPostLoginChecks`
+before changing a profile. An absent allow-listed capability, feature, or
+service is an expected desired-state no-op.

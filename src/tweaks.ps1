@@ -52,8 +52,8 @@ $allTweaks = @(
             # Hide Meet Now icon from taskbar
             Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\Explorer' -Name 'HideSCAMeetNow' -Value 1 -Type DWord -Force
             # Disable Chat icon from taskbar
-            New-Item -Path 'Registry::HKLM\TEMP\SOFTWARE\Policies\Microsoft\Windows\Windows Chat' -Force -ErrorAction SilentlyContinue | Out-Null
-            Set-ItemProperty -Path 'Registry::HKLM\TEMP\SOFTWARE\Policies\Microsoft\Windows\Windows Chat' -Name 'ChatIcon' -Value 3 -Type DWord -Force
+            New-Item -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\Windows Chat' -Force -ErrorAction SilentlyContinue | Out-Null
+            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\Windows Chat' -Name 'ChatIcon' -Value 3 -Type DWord -Force
         }
     },
     [PSCustomObject]@{ 
@@ -122,8 +122,8 @@ $allTweaks = @(
             # Prevents Windows from displaying feedback notifications that prompt users to provide feedback about their experience.
             Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\DataCollection' -Name 'DoNotShowFeedbackNotifications' -Value 1 -Type DWord -Force
             # Disables the collection of telemetry data from 32-bit applications running on 64-bit Windows systems.
-            New-Item -Path 'Registry::HKLM\TEMP\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Policies\DataCollection' -Force -ErrorAction SilentlyContinue | Out-Null
-            Set-ItemProperty -Path 'Registry::HKLM\TEMP\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Policies\DataCollection' -Name 'AllowTelemetry' -Value 0 -Type DWord -Force
+            New-Item -Path 'Registry::HKLM\TEMP\Wow6432Node\Microsoft\Windows\CurrentVersion\Policies\DataCollection' -Force -ErrorAction SilentlyContinue | Out-Null
+            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Wow6432Node\Microsoft\Windows\CurrentVersion\Policies\DataCollection' -Name 'AllowTelemetry' -Value 0 -Type DWord -Force
 
             # --- Advertising & Tailored Experiences ---
             New-Item -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\AdvertisingInfo' -Force -ErrorAction SilentlyContinue | Out-Null
@@ -149,9 +149,9 @@ $allTweaks = @(
             # Disables Text Input Personalization, preventing the collection of typing and input data for personalization purposes.
             New-Item -Path 'Registry::HKU\TEMP\Software\Microsoft\Input\TIPC' -Force -ErrorAction SilentlyContinue | Out-Null
             Set-ItemProperty -Path 'Registry::HKU\TEMP\Software\Microsoft\Input\TIPC' -Name 'Enabled' -Value 0 -Type DWord -Force
-            New-Item -Path 'Registry::HKLM\TEMP\SOFTWARE\Microsoft\Input\TIPC' -Force -ErrorAction SilentlyContinue | Out-Null
+            New-Item -Path 'Registry::HKLM\TEMP\Microsoft\Input\TIPC' -Force -ErrorAction SilentlyContinue | Out-Null
             # Disables the Text Input Personalization feature, preventing the collection of typing and input data for personalization purposes.
-            Set-ItemProperty -Path 'Registry::HKLM\TEMP\SOFTWARE\Microsoft\Input\TIPC' -Name 'Enabled' -Value 0 -Type DWord -Force
+            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Microsoft\Input\TIPC' -Name 'Enabled' -Value 0 -Type DWord -Force
             New-Item -Path 'Registry::HKU\TEMP\SOFTWARE\Microsoft\InputPersonalization' -Force -ErrorAction SilentlyContinue | Out-Null
             # Disables implicit ink and text collection, preventing the collection of handwriting and text input data for personalization.
             Set-ItemProperty -Path 'Registry::HKU\TEMP\SOFTWARE\Microsoft\InputPersonalization' -Name 'RestrictImplicitInkCollection' -Value 1 -Type DWord -Force
@@ -181,22 +181,22 @@ $allTweaks = @(
             Remove-ItemProperty -Path $siufPath -Name 'PeriodInNanoSeconds' -Force -ErrorAction SilentlyContinue
             # Hides the Settings page related to privacy and telemetry to prevent user access.
             Set-ItemProperty -Path 'Registry::HKLM\TEMP\Microsoft\Windows\CurrentVersion\Policies\Explorer' -Name 'SettingsPageVisibility' -Value 'hide:home' -Type String -Force
-            New-Item -Path 'Registry::HKLM\TEMP\SOFTWARE\Policies\Microsoft\AppV\CEIP' -Force -ErrorAction SilentlyContinue | Out-Null
+            New-Item -Path 'Registry::HKLM\TEMP\Policies\Microsoft\AppV\CEIP' -Force -ErrorAction SilentlyContinue | Out-Null
             # Disables the Customer Experience Improvement Program (CEIP) for App-V, preventing participation in the program.
-            Set-ItemProperty -Path 'Registry::HKLM\TEMP\SOFTWARE\Policies\Microsoft\AppV\CEIP' -Name 'CEIPEnable' -Value 0 -Type DWord -Force
-            New-Item -Path 'Registry::HKLM\TEMP\SOFTWARE\Policies\Microsoft\SQMClient\Windows' -Force -ErrorAction SilentlyContinue | Out-Null
-            Set-ItemProperty -Path 'Registry::HKLM\TEMP\SOFTWARE\Policies\Microsoft\SQMClient\Windows' -Name 'CEIPEnable' -Value 0 -Type DWord -Force
-            New-Item -Path 'Registry::HKLM\TEMP\SOFTWARE\Policies\Microsoft\Windows\Messaging' -Force -ErrorAction SilentlyContinue | Out-Null
+            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\Microsoft\AppV\CEIP' -Name 'CEIPEnable' -Value 0 -Type DWord -Force
+            New-Item -Path 'Registry::HKLM\TEMP\Policies\Microsoft\SQMClient\Windows' -Force -ErrorAction SilentlyContinue | Out-Null
+            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\Microsoft\SQMClient\Windows' -Name 'CEIPEnable' -Value 0 -Type DWord -Force
+            New-Item -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\Messaging' -Force -ErrorAction SilentlyContinue | Out-Null
             # Disables message synchronization, preventing the synchronization of messages across devices.
-            Set-ItemProperty -Path 'Registry::HKLM\TEMP\SOFTWARE\Policies\Microsoft\Windows\Messaging' -Name 'AllowMessageSync' -Value 0 -Type DWord -Force
+            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\Messaging' -Name 'AllowMessageSync' -Value 0 -Type DWord -Force
             New-Item -Path 'Registry::HKU\TEMP\SOFTWARE\Microsoft\Windows\CurrentVersion\Diagnostics\DiagTrack' -Force -ErrorAction SilentlyContinue | Out-Null
             # Disables toast notifications related to diagnostics tracking.
             Set-ItemProperty -Path 'Registry::HKU\TEMP\SOFTWARE\Microsoft\Windows\CurrentVersion\Diagnostics\DiagTrack' -Name 'ShowedToastAtLevel' -Value 1 -Type DWord -Force
-            New-Item -Path 'Registry::HKLM\TEMP\Software\Microsoft\Windows\CurrentVersion\Diagnostics\DiagTrack\EventTranscriptKey' -Force -ErrorAction SilentlyContinue | Out-Null
+            New-Item -Path 'Registry::HKLM\TEMP\Microsoft\Windows\CurrentVersion\Diagnostics\DiagTrack\EventTranscriptKey' -Force -ErrorAction SilentlyContinue | Out-Null
             # Disables event transcript logging for diagnostics tracking.
-            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Software\Microsoft\Windows\CurrentVersion\Diagnostics\DiagTrack\EventTranscriptKey' -Name 'EnableEventTranscript' -Value 0 -Type DWord -Force
+            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Microsoft\Windows\CurrentVersion\Diagnostics\DiagTrack\EventTranscriptKey' -Name 'EnableEventTranscript' -Value 0 -Type DWord -Force
             # Disables mini trace slot logging for diagnostics tracking.
-            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Software\Microsoft\Windows\CurrentVersion\Diagnostics\DiagTrack\EventTranscriptKey' -Name 'MiniTraceSlotEnabled' -Value 0 -Type DWord -Force
+            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Microsoft\Windows\CurrentVersion\Diagnostics\DiagTrack\EventTranscriptKey' -Name 'MiniTraceSlotEnabled' -Value 0 -Type DWord -Force
         }
     },
     [PSCustomObject]@{ 
@@ -239,12 +239,12 @@ $allTweaks = @(
             Set-ItemProperty -Path 'Registry::HKU\TEMP\SOFTWARE\Microsoft\Windows\CurrentVersion\UserProfileEngagement' -Name 'ScoobeSystemSettingEnabled' -Value 0 -Type DWord -Force
             
             # Disables the Settings Banner feature that displays tips and suggestions in the Settings app. (Win 11 22000+)
-            New-Item -Path 'Registry::HKLM\TEMP\SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\ValueBanner.IdealStateFeatureControlProvider' -Force -ErrorAction SilentlyContinue | Out-Null
-            Set-ItemProperty -Path 'Registry::HKLM\TEMP\SOFTWARE\Microsoft\WindowsRuntime\ActivatableClassId\ValueBanner.IdealStateFeatureControlProvider' -Name 'ActivationType' -Value 0 -Type DWord -Force
+            New-Item -Path 'Registry::HKLM\TEMP\Microsoft\WindowsRuntime\ActivatableClassId\ValueBanner.IdealStateFeatureControlProvider' -Force -ErrorAction SilentlyContinue | Out-Null
+            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Microsoft\WindowsRuntime\ActivatableClassId\ValueBanner.IdealStateFeatureControlProvider' -Name 'ActivationType' -Value 0 -Type DWord -Force
             
             # Disables online tips in the Settings app, preventing Windows from displaying tips and suggestions sourced from online content.
-            New-Item -Path 'Registry::HKLM\TEMP\SOFTWARE\Microsoft\PolicyManager\default\Settings\AllowOnlineTips' -Force -ErrorAction SilentlyContinue | Out-Null
-            Set-ItemProperty -Path 'Registry::HKLM\TEMP\SOFTWARE\Microsoft\PolicyManager\default\Settings\AllowOnlineTips' -Name 'value' -Value 0 -Type DWord -Force
+            New-Item -Path 'Registry::HKLM\TEMP\Microsoft\PolicyManager\default\Settings\AllowOnlineTips' -Force -ErrorAction SilentlyContinue | Out-Null
+            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Microsoft\PolicyManager\default\Settings\AllowOnlineTips' -Name 'value' -Value 0 -Type DWord -Force
             # Disables online tips in File Explorer, preventing Windows from displaying tips and suggestions sourced from online content.
             New-Item -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\Explorer' -ErrorAction SilentlyContinue | Out-Null
             Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\Explorer' -Name 'AllowOnlineTips' -Value 0 -Type DWord -Force
@@ -416,7 +416,7 @@ $allTweaks = @(
         ID = 'DisableStoreAutoUpdate';
         Action = "InlineScript"; 
         Code = {
-            $path = 'Registry::HKLM\TEMP\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsStore\WindowsUpdate'
+            $path = 'Registry::HKLM\TEMP\Microsoft\Windows\CurrentVersion\WindowsStore\WindowsUpdate'
             # Disables automatic updates for apps installed from the Microsoft Store.
             New-Item -Path $path -Force -ErrorAction SilentlyContinue | Out-Null
             Set-ItemProperty -Path $path -Name 'AutoDownload' -Value 2 -Type DWord -Force
@@ -447,3 +447,46 @@ $allTweaks = @(
         }
     }
 )
+
+# Metadata is kept next to the tweak catalog so unattended verification can
+# distinguish offline settings from deliberate first-login actions.
+$tweakMetadata = @{
+    WU_NotifyDownload               = @{ Category = 'Updates'; RiskLevel = 'Medium'; Verification = @(@{ Hive = 'SOFTWARE'; Path = 'Policies\Microsoft\Windows\WindowsUpdate\AU'; Name = 'AUOptions'; Value = 2 }) }
+    WU_NotifyInstall                = @{ Category = 'Updates'; RiskLevel = 'Medium'; Verification = @(@{ Hive = 'SOFTWARE'; Path = 'Policies\Microsoft\Windows\WindowsUpdate\AU'; Name = 'AUOptions'; Value = 3 }) }
+    AddDesktopIcons                 = @{ Category = 'Desktop'; RiskLevel = 'Low'; Verification = @(@{ Hive = 'SOFTWARE'; Path = 'Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel'; Name = '{20D04FE0-3AEA-1069-A2D8-08002B30309D}'; Value = 0 }) }
+    ConfigureTaskbar                = @{ Category = 'Desktop'; RiskLevel = 'Low'; Verification = @(@{ Hive = 'DEFAULT'; Path = 'Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'; Name = 'TaskbarAl'; Value = 0 }) }
+    HideSearchIcon                  = @{ Category = 'Desktop'; RiskLevel = 'Low'; ExecutionPhase = 'PostLogin'; RequiresNetwork = $false; Verification = 'DeferredPostLogin' }
+    ConfigureFileExplorer           = @{ Category = 'Desktop'; RiskLevel = 'Low'; Verification = @(@{ Hive = 'DEFAULT'; Path = 'Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'; Name = 'HideFileExt'; Value = 0 }) }
+    ConfigureStartMenu              = @{ Category = 'Desktop'; RiskLevel = 'Low'; Verification = @(@{ Hive = 'DEFAULT'; Path = 'Software\Microsoft\Windows\CurrentVersion\Search'; Name = 'BingSearchEnabled'; Value = 0 }) }
+    DisablePrivacyAndTelemetry      = @{ Category = 'Privacy'; RiskLevel = 'Medium'; Verification = @(@{ Hive = 'SOFTWARE'; Path = 'Policies\Microsoft\Windows\DataCollection'; Name = 'AllowTelemetry'; Value = 0 }) }
+    DisableAdsAndSuggestions        = @{ Category = 'Privacy'; RiskLevel = 'Low'; Verification = @(@{ Hive = 'DEFAULT'; Path = 'Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'; Name = 'SubscribedContent-338387Enabled'; Value = 0 }) }
+    DisableSpotlight                = @{ Category = 'Privacy'; RiskLevel = 'Low'; Verification = @(@{ Hive = 'DEFAULT'; Path = 'Software\Policies\Microsoft\Windows\CloudContent'; Name = 'DisableWindowsSpotlightFeatures'; Value = 1 }) }
+    DisableWindowsAIFeatures        = @{ Category = 'Privacy'; RiskLevel = 'Low'; Verification = @(@{ Hive = 'SOFTWARE'; Path = 'Policies\Microsoft\Windows\WindowsAI'; Name = 'DisableAIDataAnalysis'; Value = 1 }) }
+    DisableEdgeAIFeatures           = @{ Category = 'Browser'; RiskLevel = 'Low'; Verification = @(@{ Hive = 'SOFTWARE'; Path = 'Policies\Microsoft\Edge'; Name = 'HubsSidebarEnabled'; Value = 0 }) }
+    DisableEdgeContentFeatures      = @{ Category = 'Browser'; RiskLevel = 'Low'; Verification = @(@{ Hive = 'SOFTWARE'; Path = 'Policies\Microsoft\Edge'; Name = 'NewTabPageContentEnabled'; Value = 0 }) }
+    DisableSystemPerformanceTweaks = @{ Category = 'Performance'; RiskLevel = 'Low'; Verification = @(@{ Hive = 'DEFAULT'; Path = 'SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Serialize'; Name = 'StartupDelayInMSec'; Value = 0 }) }
+    ConfigureCrashControl           = @{ Category = 'Reliability'; RiskLevel = 'Low'; Verification = @(@{ Hive = 'SYSTEM'; Path = '{ControlSet}\Control\CrashControl'; Name = 'AutoReboot'; Value = 0 }) }
+    EnableRestartApps               = @{ Category = 'Desktop'; RiskLevel = 'Low'; Verification = @(@{ Hive = 'DEFAULT'; Path = 'Software\Microsoft\Windows NT\CurrentVersion\Winlogon'; Name = 'RestartApps'; Value = 1 }) }
+    ForceOfflineAccount             = @{ Category = 'Setup'; RiskLevel = 'Medium'; Verification = @(@{ Hive = 'SOFTWARE'; Path = 'Microsoft\Windows\CurrentVersion\OOBE'; Name = 'BypassNRO'; Value = 1 }) }
+    DisableStickyKeys               = @{ Category = 'Desktop'; RiskLevel = 'Low'; Verification = @(@{ Hive = 'DEFAULT'; Path = 'Control Panel\Accessibility\StickyKeys'; Name = 'Flags'; Value = '506' }) }
+    EnableStorageSense              = @{ Category = 'Storage'; RiskLevel = 'Low'; Verification = @(@{ Hive = 'SOFTWARE'; Path = 'Policies\Microsoft\Windows\StorageSense'; Name = 'AllowStorageSense'; Value = 1 }) }
+    DisableEdgeShortcut             = @{ Category = 'Browser'; RiskLevel = 'Low'; Verification = @(@{ Hive = 'SOFTWARE'; Path = 'Policies\Microsoft\EdgeUpdate'; Name = 'CreateDesktopShortcutDefault'; Value = 0 }) }
+    DisableStoreAutoUpdate          = @{ Category = 'Updates'; RiskLevel = 'Medium'; Verification = @(@{ Hive = 'SOFTWARE'; Path = 'Microsoft\Windows\CurrentVersion\WindowsStore\WindowsUpdate'; Name = 'AutoDownload'; Value = 2 }) }
+    DisableOneDriveSetup            = @{ Category = 'Desktop'; RiskLevel = 'Low'; Verification = @(@{ Hive = 'DEFAULT'; Path = 'Software\Microsoft\Windows\CurrentVersion\Run'; Name = 'OneDriveSetup'; Absent = $true }) }
+    DisableOfficeTelemetry          = @{ Category = 'Privacy'; RiskLevel = 'Low'; Verification = @(@{ Hive = 'DEFAULT'; Path = 'Software\Policies\Microsoft\office\16.0\common'; Name = 'sendcustomerdata'; Value = 0 }) }
+}
+
+foreach ($tweak in $allTweaks) {
+    $metadata = $tweakMetadata[$tweak.ID]
+    if ($null -eq $metadata) { throw "Missing tweak metadata: $($tweak.ID)" }
+    foreach ($property in @{
+        Category = $metadata.Category
+        RiskLevel = $metadata.RiskLevel
+        ExecutionPhase = if ($metadata.ContainsKey('ExecutionPhase')) { $metadata.ExecutionPhase } else { 'Offline' }
+        RequiresNetwork = if ($metadata.ContainsKey('RequiresNetwork')) { [bool]$metadata.RequiresNetwork } else { $false }
+        AllowAbsent = $false
+        Verification = $metadata.Verification
+    }.GetEnumerator()) {
+        $tweak | Add-Member -NotePropertyName $property.Key -NotePropertyValue $property.Value
+    }
+}

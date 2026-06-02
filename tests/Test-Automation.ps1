@@ -72,9 +72,11 @@ Assert-True -Condition ([string]$settings.Architecture -eq 'amd64') -Message 'Au
 Assert-True -Condition ([string]$settings.InitialFeatureVersion -match '^\d{2}H[12]$') -Message 'Automation settings example must seed the initial feature hold state.'
 Assert-True -Condition ([int]$settings.MinimumFreeSpaceGiB -ge 50) -Message 'Automation settings example must reserve enough free space for converter and WinISOUtil workspaces.'
 
-$profile = Get-Content -LiteralPath (Join-Path $repoRoot 'automation\profile-v2.example.json') -Raw | ConvertFrom-Json
-Assert-True -Condition ([int]$profile.SchemaVersion -eq 2) -Message 'Profile example must use schema version 2.'
+$profile = Get-Content -LiteralPath (Join-Path $repoRoot 'automation\profile-v3.example.json') -Raw | ConvertFrom-Json
+Assert-True -Condition ([int]$profile.SchemaVersion -eq 3) -Message 'Preferred profile example must use schema version 3.'
 Assert-True -Condition ($profile.PSObject.Properties.Name -contains 'RemovedAppSelectors') -Message 'Profile example must contain stable app selectors.'
+Assert-True -Condition ($profile.PSObject.Properties.Name -contains 'RemovedCapabilities') -Message 'Profile example must contain removable capabilities.'
+Assert-True -Condition ($profile.PSObject.Properties.Name -contains 'DisabledFeatures') -Message 'Profile example must contain removable features.'
 Assert-True -Condition ($profile.PSObject.Properties.Name -notcontains 'RemovedApps') -Message 'Profile example must not use version-specific app package names.'
 
 $automationScript = Get-Content -LiteralPath (Join-Path $repoRoot 'automation\Invoke-AutomatedBuild.ps1') -Raw
@@ -95,6 +97,9 @@ Assert-True -Condition ($automationScript -match '\[string\[\]\]\$TargetId') -Me
 Assert-True -Condition ($automationScript -match 'exitcode\.log') -Message 'Automation must persist native process exit codes through a wrapper marker.'
 Assert-True -Condition ($automationScript -match 'Windows11-Pro-\$\(\$target\.Locale\)-\$\(\$candidate\.FeatureVersion\)-\$\(\$candidate\.Build\)-by-WinISOUtil\.iso') -Message 'Automation outputs must use the by-WinISOUtil ISO name suffix.'
 Assert-True -Condition ($automationScript -match 'Legacy output already exists') -Message 'Automation must avoid rebuilding when a legacy custom-suffixed ISO already exists.'
+Assert-True -Condition ($automationScript -match 'ProfileSchemaVersion') -Message 'Automation manifest must include the profile schema version.'
+Assert-True -Condition ($automationScript -match 'ValidationReportSha256') -Message 'Automation manifest must include the validation report SHA-256.'
+Assert-True -Condition ($automationScript -match '\.validation\.json') -Message 'Automation must promote and retain validation report sidecars.'
 
 $wrapper = Get-Content -LiteralPath (Join-Path $repoRoot 'automation\Invoke-MonthlyBuild.ps1') -Raw
 Assert-True -Condition ($wrapper -match 'Invoke-AutomatedBuild\.ps1') -Message 'Deprecated monthly wrapper must delegate to the UUP automation entry point.'

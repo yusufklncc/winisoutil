@@ -13,13 +13,31 @@ Kod veya dokümantasyon değişikliklerinden sonra repo kökünde şu kontroller
 ```powershell
 .\tests\Test-Static.ps1
 .\tests\Test-Automation.ps1
+.\tests\Test-ProfileValidation.ps1
 git diff --check
 ```
 
 `Test-Static.ps1`, PowerShell dosyalarını parse eder; yerelleştirme ve kritik
 invariant kontrollerini yapar. `Test-Automation.ps1`, provider fixture
 değerlerini, örnek ayarları, tedarik zinciri kısıtlarını, kurtarma hook'larını,
-log davranışını ve çıktı adlandırmasını doğrular.
+log davranışını ve çıktı adlandırmasını doğrular. `Test-ProfileValidation.ps1`,
+Windows imajı mount etmeden şema migration, legacy normalizasyon, fail-closed
+katalog, desired-state no-op, strict kontrol ve deferred post-login raporlama
+davranışlarını doğrular.
+
+## Verifier-Only Kontrolü
+
+UUP assembly veya debloat aşamasını tekrar çalıştırmadan mevcut ISO'yu
+doğrulayın:
+
+```powershell
+.\automation\Test-WinIsoUtilIso.ps1 `
+  -IsoPath 'D:\WinISOUtil\output\tr-tr-pro\Windows11-Pro-tr-tr-25H2-26200.8524-custom.iso' `
+  -ConfigurationPath 'D:\WinISOUtil\config\desktop-v3.json'
+```
+
+Komut final install imajını read-only mount eder, profile-aware kontrolleri
+çalıştırır ve `<iso>.validation.json` yazar.
 
 ## Canlı UUP API Smoke Testi
 
@@ -52,8 +70,9 @@ Zamanlanmış batch'i etkinleştirmeden önce bir locale için manuel çalışma
 ```
 
 Otomasyon çıktıyı promote etmeden önce final ISO'yu mount eder; Professional
-imajı, locale, seçilmiş build ve revision değerini, boot image, WinRE yapısını
-ve korunan zorunlu uygulamaları doğrular.
+imajı, locale, seçilmiş build ve revision değerini, boot image, WinRE yapısını,
+korunan zorunlu uygulamaları, strict offline profil state değerini ve deferred
+post-login artefact dosyalarını doğrular.
 
 ## Hyper-V Kurulum Smoke Testi
 
@@ -69,5 +88,8 @@ değişikliğinde, profil değişikliğinde ve servicing mantığı değişikli�
    işlevlerinin kullanılabilir kaldığını doğrulayın.
 7. Seçilmiş uygulama kaldırma, servis, feature ve registry tercihlerinin
    beklendiği gibi davrandığını doğrulayın.
+8. Masaüstündeki post-login BAT dosyasını manuel çalıştırıp Arama simgesi
+   davranışını doğrulayın.
 
-ISO yanındaki JSON manifestini ve ilgili logları test kaydıyla birlikte tutun.
+ISO yanındaki manifest, validation JSON ve ilgili logları test kaydıyla birlikte
+tutun.

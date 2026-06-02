@@ -8,7 +8,7 @@ WinISOUtil profile.
 
 Related documentation:
 
-- [`PROFILE.md`](PROFILE.md): create and maintain schema version 2 profiles
+- [`PROFILE.md`](PROFILE.md): create, migrate, and maintain schema version 3 profiles
 - [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md): operational recovery runbook
 - [`TESTING.md`](TESTING.md): fixture, live API, and installation validation
 - [`../SECURITY.md`](../SECURITY.md): trust boundaries and supply-chain policy
@@ -70,11 +70,10 @@ Copy-Item .\automation\settings.example.json .\automation\settings.json
    `SYSTEM` account. Set `InitialFeatureVersion` to the established feature
    release you intentionally want to use for the first run.
 
-3. Export a `SchemaVersion: 2` WinISOUtil profile interactively from a current
-   baseline ISO. Version 2 stores stable `RemovedAppSelectors` instead of
-   version-specific package names. Follow [`PROFILE.md`](PROFILE.md). Use
-   `automation\profile-v2.example.json` as a minimal starting point when no app
-   removals are required.
+3. Export a `SchemaVersion: 3` WinISOUtil profile interactively from a current
+   baseline ISO. Version 3 stores stable AppX, capability, and removable-feature
+   choices. Follow [`PROFILE.md`](PROFILE.md). Use
+   `automation\profile-v3.example.json` as a minimal starting point.
 
 4. Create the local converter pin:
 
@@ -139,11 +138,11 @@ archive whose SHA-256 does not match the local pin.
 | `FeatureReleaseHoldDays` | Observation window before a newer feature release is promoted. |
 | `RetentionCount` | Successful final ISOs retained per target. |
 | `MinimumFreeSpaceGiB` | Required reserve on cache, staging, output, and working volumes before a full build. Defaults to `50` when omitted. |
-| `DefaultConfigurationPath` | Default schema version 2 WinISOUtil profile. |
+| `DefaultConfigurationPath` | Default schema version 3 WinISOUtil profile. Version 2 remains supported with a migration warning. |
 | `WebhookUrl` | Optional HTTPS endpoint that receives the final batch summary. Keep credentials out of tracked files. |
 | `Targets[].Id` | Stable local target identifier used in paths, logs, and `-TargetId`. |
 | `Targets[].Locale` | UUP locale such as `tr-tr`, `en-us`, or `de-de`. |
-| `Targets[].ConfigurationPath` | Optional target-specific schema version 2 profile override. |
+| `Targets[].ConfigurationPath` | Optional target-specific schema version 2 or 3 profile override. |
 | `Paths` | Local tools, cache, staging, output, logs, working, and state roots accessible to `SYSTEM`. |
 
 ## Operational Notes
@@ -164,7 +163,9 @@ is updated atomically at phase boundaries, so an interrupted run still records
 its last known phase and log path. State manifests, per-target ISO hashes, and
 the last completed batch result are written under `Paths.State` and beside
 promoted ISOs. The batch also writes an Application Event Log entry. An optional
-HTTPS `WebhookUrl` receives the same summary JSON. To follow the current log:
+HTTPS `WebhookUrl` receives the same summary JSON. Each promoted ISO also gets
+an `<iso>.validation.json` sibling report with strict offline, no-op, and
+deferred post-login checks. To follow the current log:
 
 ```powershell
 Get-Content D:\WinISOUtil\logs\automated-build-*.log -Wait -Tail 50
@@ -223,9 +224,11 @@ Get-WinEvent -FilterHashtable @{
 
 The final ISO is promoted only after validation succeeds. Validation checks the
 Professional edition, requested locale, selected build and revision, boot
-image, install image, WinRE structure, and required protected provisioned apps.
-The promoted ISO receives a sibling JSON manifest containing source and final
-SHA-256 values.
+image, install image, WinRE structure, required protected provisioned apps, and
+profile-aware AppX, capability, optional-feature, service, and registry state.
+Post-login actions are reported as deferred and their desktop BAT payload is
+verified. The promoted ISO receives a sibling JSON manifest containing source,
+final, and validation-report SHA-256 values.
 
 | Exit code | Meaning |
 | --- | --- |

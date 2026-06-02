@@ -7,7 +7,7 @@
   "FeatureReleaseHoldDays": 30,
   "RetentionCount": 2,
   "MinimumFreeSpaceGiB": 50,
-  "DefaultConfigurationPath": "D:\\WinISOUtil\\config\\desktop-v2.json",
+  "DefaultConfigurationPath": "D:\\WinISOUtil\\config\\desktop-v3.json",
   "WebhookUrl": "",
   "Targets": [
     {
@@ -21,7 +21,7 @@
     {
       "Id": "de-de-pro",
       "Locale": "de-de",
-      "ConfigurationPath": "D:\\WinISOUtil\\config\\desktop-de-v2.json"
+      "ConfigurationPath": "D:\\WinISOUtil\\config\\desktop-de-v3.json"
     }
   ],
   "Paths": {

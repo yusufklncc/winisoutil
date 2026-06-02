@@ -111,3 +111,11 @@ Get-PSDrive D
 Aktif çalışma sırasında cache dosyalarını silmeyin. Cache temizliği ayrı ve
 incelenmiş bir bakım işlemidir; final ISO retention işlemi ortak payload
 dosyalarını temizlemez.
+
+## Profil Doğrulamasını İnceleme
+
+Promote edilen ve verifier-only kontrolden geçen ISO dosyaları yanında
+`<iso>.validation.json` raporu oluşturulur. Profili değiştirmeden önce
+`FailedChecks`, `NoOpChecks` ve `DeferredPostLoginChecks` alanlarını inceleyin.
+Allow-list içindeki bir capability, feature veya servisin bulunmaması beklenen
+desired-state no-op davranışıdır.

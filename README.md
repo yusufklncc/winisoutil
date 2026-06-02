@@ -27,7 +27,7 @@ This tool features both an interactive menu-driven **Manual Mode** and an **Unat
 - **Detailed Configuration**:
   - **Privacy and Telemetry**: Disable data collection and error reporting services.
   - **UI Tweaks**: Align the taskbar to the left, configure desktop icons, and tweak File Explorer.
-  - **Component Removal**: Remove legacy components like Internet Explorer and Windows Media Player.
+  - **Controlled Debloat Catalog**: Remove opt-in provisioned AppX packages, conservative Windows capabilities, and legacy optional features.
 - **Reliability and Dependency Management**:
   - A `trap` mechanism ensures a safe exit and cleanup if an error occurs, preventing a "dirty" state (like a mounted image).
   - Temporary files are only deleted from an owned, marker-protected workspace under `%TEMP%\WinISOUtil`.
@@ -76,7 +76,7 @@ Instead of manually selecting the same options every time, you can streamline yo
 1.  **Exporting Settings**:
 
     - Run the script in interactive mode and select all your desired tweaks, component removals, and app cleanups from the menus.
-    - From the main menu, choose option **"7. Export Settings (.json)"** to save your current selections into a configuration file.
+    - From the main menu, choose option **"9. Export Settings (.json)"** to save your current selections into a configuration file.
 
 2.  **Importing Settings**:
     - The next time you run the script, after selecting an ISO, it will ask if you want to import a configuration file.
@@ -91,14 +91,14 @@ Instead of manually selecting the same options every time, you can streamline yo
   -IsoPath 'D:\ISO\Windows11.iso' `
   -ConfigurationPath '.\config\desktop.json' `
   -EditionIndex 1 `
-  -OutputIsoPath 'D:\ISO\out\Windows11-custom.iso'
+  -OutputIsoPath 'D:\ISO\out\Windows11-by-WinISOUtil.iso'
 ```
 
-New exports use configuration schema version 2 and stable `RemovedAppSelectors`,
-so the same profile can be reused across refreshed ISO builds and locales.
-Version 1 profiles remain readable for one-off runs. Zero-touch automation
-requires schema version 2. See [`docs/PROFILE.md`](docs/PROFILE.md) for the
-profile lifecycle.
+New exports use configuration schema version 3. Stable `RemovedAppSelectors`,
+`RemovedCapabilities`, and `DisabledFeatures` keep reviewed debloat choices
+reusable across refreshed ISO builds and locales. Version 1 profiles remain
+readable for one-off runs. Version 2 remains supported in zero-touch automation
+with a migration warning. See [`docs/PROFILE.md`](docs/PROFILE.md).
 
 ### Unattended CLI Reference
 
@@ -107,6 +107,7 @@ profile lifecycle.
 | `-IsoPath` | Input Windows ISO. Required in unattended mode. |
 | `-ConfigurationPath` | Exported JSON profile. Required in unattended mode. |
 | `-OutputIsoPath` | Final ISO path. Required in unattended mode. |
+| `-ValidationReportPath` | Optional output path for the ISO sibling validation report. Defaults to `<iso>.validation.json`. |
 | `-EditionIndex` | Image index to customize. Required when the ISO contains multiple editions. |
 | `-Language` | Tool message language: `tr` or `en`. Defaults to `en` in unattended mode. |
 | `-UpdatesPath` | Optional folder containing `.msu` update packages. |
@@ -119,15 +120,15 @@ profile lifecycle.
 The recommended zero-touch model runs on a dedicated Windows 11 machine or VM,
 not on GitHub Actions. A daily SYSTEM task discovers an eligible Retail UUP
 build, downloads hash-verified payloads from Microsoft CDN hosts, assembles one
-Windows 11 Pro ISO per configured locale, applies a schema version 2 profile,
-validates the result, and retains the configured number of successful outputs.
+Windows 11 Pro ISO per configured locale, applies a reviewed profile, validates
+the result, and retains the configured number of successful outputs.
 
 See [`docs/AUTOMATION.md`](docs/AUTOMATION.md) for setup and operations.
 
 ## Documentation
 
 - [`docs/AUTOMATION.md`](docs/AUTOMATION.md): daily multi-locale UUP automation
-- [`docs/PROFILE.md`](docs/PROFILE.md): create and maintain schema version 2 profiles
+- [`docs/PROFILE.md`](docs/PROFILE.md): create, migrate, and maintain schema version 3 profiles
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md): recovery and diagnostics runbook
 - [`docs/TESTING.md`](docs/TESTING.md): fixture, live API, and Hyper-V validation
 - [`SECURITY.md`](SECURITY.md): trust boundaries and supply-chain policy
@@ -141,7 +142,9 @@ The project is designed to be modular. You can easily add or modify customizatio
 
 - **`src\languages.ps1`**: Contains all the interface text strings for supported languages. Add a new language block here to extend localization.
 - **`src\tweaks.ps1`**: Defines all available registry tweaks. You can add your own `[PSCustomObject]` to this list to create a new tweak.
-- **`src\components.ps1`**: Lists Windows components and services that can be removed or disabled.
+- **`src\components.ps1`**: Lists service tweaks that can be applied offline.
+- **`src\capabilities.ps1`**: Defines the conservative removable capability allow-list.
+- **`src\removable-features.ps1`**: Defines the conservative disable/remove optional-feature allow-list.
 - **`src\features.ps1`**: Defines optional Windows features that can be enabled, like `.NET Framework 3.5`.
 - **`src\app-exclusion-list.ps1`**: Contains a list of critical system apps (like the Microsoft Store) that are excluded from the removal list to prevent breaking the system.
 
@@ -163,6 +166,7 @@ Run local fixture checks before submitting a change:
 ```powershell
 .\tests\Test-Static.ps1
 .\tests\Test-Automation.ps1
+.\tests\Test-ProfileValidation.ps1
 ```
 
 The live UUP API smoke test and Hyper-V installation test are documented in

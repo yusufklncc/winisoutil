@@ -11,6 +11,7 @@ Set-StrictMode -Version Latest
 
 Import-Module (Join-Path $PSScriptRoot 'modules\Automation.Common.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'modules\UupDump.Provider.psm1')
+Import-Module (Join-Path $PSScriptRoot 'modules\Profile.Validation.psm1') -Force
 
 if ([string]::IsNullOrWhiteSpace($SettingsPath)) { $SettingsPath = Join-Path $PSScriptRoot 'settings.json' }
 if ([string]::IsNullOrWhiteSpace($ToolsPinPath)) { $ToolsPinPath = Join-Path $PSScriptRoot 'tools.pin.json' }
@@ -260,6 +261,19 @@ function Get-ConfigurationSchemaVersion {
     return [int]$configuration.SchemaVersion
 }
 
+function Assert-AutomationProfileSchema {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $schemaVersion = Get-ConfigurationSchemaVersion -Path $Path
+    if ($schemaVersion -notin @(2, 3)) {
+        throw "Zero-touch automation requires a SchemaVersion 2 or 3 WinISOUtil profile: $Path"
+    }
+    if ($schemaVersion -eq 2) {
+        Write-AutomationLog -Level Warning -Message "SchemaVersion 2 profile remains supported, but migration to SchemaVersion 3 is recommended: $Path"
+    }
+    return $schemaVersion
+}
+
 function Read-AutomationSettings {
     param([Parameter(Mandatory)][string]$Path)
 
@@ -292,9 +306,7 @@ function Read-AutomationSettings {
         $resolvedPaths[$name] = Resolve-AutomationPath -Path ([string](Get-RequiredProperty -Object $paths -Name $name)) -BaseDirectory $baseDirectory
     }
     $defaultConfigurationPath = Resolve-AutomationPath -Path ([string](Get-RequiredProperty -Object $settings -Name 'DefaultConfigurationPath')) -BaseDirectory $baseDirectory
-    if ((Get-ConfigurationSchemaVersion -Path $defaultConfigurationPath) -ne 2) {
-        throw "Zero-touch automation requires a SchemaVersion 2 WinISOUtil profile: $defaultConfigurationPath"
-    }
+    $defaultProfileSchemaVersion = Assert-AutomationProfileSchema -Path $defaultConfigurationPath
 
     $targetIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     $targets = [System.Collections.Generic.List[object]]::new()
@@ -313,13 +325,16 @@ function Read-AutomationSettings {
             -not [string]::IsNullOrWhiteSpace([string]$target.ConfigurationPath)) {
             $configurationPath = Resolve-AutomationPath -Path ([string]$target.ConfigurationPath) -BaseDirectory $baseDirectory
         }
-        if ((Get-ConfigurationSchemaVersion -Path $configurationPath) -ne 2) {
-            throw "Zero-touch automation requires a SchemaVersion 2 WinISOUtil profile: $configurationPath"
+        $profileSchemaVersion = if ($configurationPath -eq $defaultConfigurationPath) {
+            $defaultProfileSchemaVersion
+        } else {
+            Assert-AutomationProfileSchema -Path $configurationPath
         }
         $targets.Add([PSCustomObject]@{
             Id                = $id
             Locale            = $locale.ToLowerInvariant()
             ConfigurationPath = $configurationPath
+            ProfileSchemaVersion = $profileSchemaVersion
         })
     }
     if ($targets.Count -eq 0) {
@@ -670,7 +685,9 @@ function Assert-WindowsIso {
         [Parameter(Mandatory)][string]$IsoPath,
         [Parameter(Mandatory)][string]$ExpectedBuild,
         [Parameter(Mandatory)][string]$ExpectedLocale,
-        [Parameter(Mandatory)][string]$ValidationDirectory
+        [Parameter(Mandatory)][string]$ValidationDirectory,
+        [string]$ConfigurationPath,
+        [string]$ValidationReportPath
     )
 
     New-Item -ItemType Directory -Path $ValidationDirectory -Force -ErrorAction Stop | Out-Null
@@ -722,6 +739,26 @@ function Assert-WindowsIso {
         foreach ($requiredApp in @('Microsoft.SecHealthUI', 'Microsoft.WindowsStore', 'Microsoft.DesktopAppInstaller')) {
             if (($apps -join "`n") -notmatch [regex]::Escape($requiredApp)) {
                 throw "ISO image is missing required provisioned app: $requiredApp"
+            }
+        }
+        if (-not [string]::IsNullOrWhiteSpace($ConfigurationPath)) {
+            $configuration = Get-Content -LiteralPath $ConfigurationPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            $profileValidation = Invoke-WinIsoUtilProfileValidation `
+                -MountPath $imageMountDirectory `
+                -Configuration $configuration `
+                -RepositoryRoot ([System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))) `
+                -DismPath 'dism.exe'
+            if ([string]::IsNullOrWhiteSpace($ValidationReportPath)) {
+                $ValidationReportPath = "$IsoPath.validation.json"
+            }
+            Write-WinIsoUtilValidationReport `
+                -Validation $profileValidation `
+                -ConfigurationPath $ConfigurationPath `
+                -IsoPath $IsoPath `
+                -OutputPath $ValidationReportPath | Out-Null
+            if ($profileValidation.OverallStatus -ne 'Passed') {
+                $failedMessages = @($profileValidation.FailedChecks | ForEach-Object { "$($_.Type)/$($_.Id): $($_.Message)" })
+                throw "Offline profile validation failed: $($failedMessages -join '; ')"
             }
         }
     } finally {
@@ -895,6 +932,7 @@ function Remove-ExpiredOutputs {
     foreach ($iso in @($isoFiles | Select-Object -Skip $RetentionCount)) {
         Remove-Item -LiteralPath $iso.FullName -Force -ErrorAction Stop
         Remove-Item -LiteralPath "$($iso.FullName).json" -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath "$($iso.FullName).validation.json" -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -958,7 +996,7 @@ function Invoke-WinIsoUtil {
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $scriptPath,
         '-Unattended', '-Language', $Settings.ToolLanguage,
         '-IsoPath', $SourceIso, '-ConfigurationPath', $Target.ConfigurationPath,
-        '-EditionIndex', '1', '-OutputIsoPath', $OutputIso, '-WorkingDirectory', $WorkingDirectory
+        '-EditionIndex', '1', '-OutputIsoPath', $OutputIso, '-ValidationReportPath', "$OutputIso.validation.json", '-WorkingDirectory', $WorkingDirectory
     )
     Write-AutomationLog -Message "Starting WinISOUtil for $($Target.Id)."
     Invoke-LoggedProcess `
@@ -1094,9 +1132,12 @@ try {
             Write-RunCheckpoint -Status 'running' -Phase 'customization' -TargetId $target.Id -Summary $summary
             Invoke-WinIsoUtil -Settings $settings -Target $target -SourceIso $sourceIso -OutputIso $stagedFinalIso -WorkingDirectory $workDirectory -TranscriptBasePath "$transcriptPrefix-winisoutil"
             Write-RunCheckpoint -Status 'running' -Phase 'final-validation' -TargetId $target.Id -Summary $summary
-            Assert-WindowsIso -IsoPath $stagedFinalIso -ExpectedBuild $candidate.Build -ExpectedLocale $target.Locale -ValidationDirectory (Join-Path $validationDirectory 'final')
+            $stagedValidationReport = "$stagedFinalIso.validation.json"
+            Assert-WindowsIso -IsoPath $stagedFinalIso -ExpectedBuild $candidate.Build -ExpectedLocale $target.Locale -ValidationDirectory (Join-Path $validationDirectory 'final') -ConfigurationPath $target.ConfigurationPath -ValidationReportPath $stagedValidationReport
             $finalSha256 = (Get-FileHash -LiteralPath $stagedFinalIso -Algorithm SHA256).Hash
+            $validationReportSha256 = (Get-FileHash -LiteralPath $stagedValidationReport -Algorithm SHA256).Hash
             Move-Item -LiteralPath $stagedFinalIso -Destination $finalOutput -ErrorAction Stop
+            Move-Item -LiteralPath $stagedValidationReport -Destination "$finalOutput.validation.json" -ErrorAction Stop
 
             $manifest = [ordered]@{
                 SchemaVersion       = 1
@@ -1106,8 +1147,10 @@ try {
                 FeatureVersion      = $candidate.FeatureVersion
                 Build               = $candidate.Build
                 ConfigurationSha256 = $configSha256
+                ProfileSchemaVersion = $target.ProfileSchemaVersion
                 SourceIsoSha256     = $sourceSha256
                 FinalIsoSha256      = $finalSha256
+                ValidationReportSha256 = $validationReportSha256
                 CompletedAt         = (Get-Date).ToString('o')
             }
             Write-JsonAtomic -Value $manifest -Path "$finalOutput.json"

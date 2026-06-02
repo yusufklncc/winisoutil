@@ -8,7 +8,7 @@ oluşturur ve WinISOUtil profilini uygular.
 
 İlgili dokümanlar:
 
-- [`PROFILE.tr.md`](PROFILE.tr.md): şema sürüm 2 profillerini oluşturma ve koruma
+- [`PROFILE.tr.md`](PROFILE.tr.md): şema sürüm 3 profillerini oluşturma, migrate etme ve koruma
 - [`TROUBLESHOOTING.tr.md`](TROUBLESHOOTING.tr.md): operasyonel kurtarma runbook'u
 - [`TESTING.tr.md`](TESTING.tr.md): fixture, canlı API ve kurulum doğrulaması
 - [`../SECURITY.md`](../SECURITY.md): güven sınırları ve tedarik zinciri politikası
@@ -72,11 +72,11 @@ Copy-Item .\automation\settings.example.json .\automation\settings.json
    değerini ilk çalışmada bilinçli olarak kullanmak istediğiniz oturmuş feature
    sürümüne ayarlayın.
 
-3. Güncel baseline ISO üzerinden interaktif olarak `SchemaVersion: 2`
-   WinISOUtil profili export edin. Sürüm 2, sürüme bağlı paket adları yerine
-   kararlı `RemovedAppSelectors` değerlerini saklar. [`PROFILE.tr.md`](PROFILE.tr.md)
-   dokümanını izleyin. Uygulama kaldırmayacaksanız minimal başlangıç için
-   `automation\profile-v2.example.json` kullanabilirsiniz.
+3. Güncel baseline ISO üzerinden interaktif olarak `SchemaVersion: 3`
+   WinISOUtil profili export edin. Sürüm 3 kararlı AppX, capability ve
+   removable-feature seçimlerini saklar. [`PROFILE.tr.md`](PROFILE.tr.md)
+   dokümanını izleyin. Minimal başlangıç için
+   `automation\profile-v3.example.json` kullanabilirsiniz.
 
 4. Yerel converter pin dosyasını oluşturun:
 
@@ -143,11 +143,11 @@ eşleşmeyen arşivi promote etmez.
 | `FeatureReleaseHoldDays` | Yeni feature sürümü promote edilmeden önce uygulanacak gözlem süresidir. |
 | `RetentionCount` | Hedef başına tutulacak başarılı final ISO sayısıdır. |
 | `MinimumFreeSpaceGiB` | Tam üretim öncesinde cache, staging, output ve working disklerinde gerekli boş alan rezervidir. Yazılmazsa varsayılan `50` değeridir. |
-| `DefaultConfigurationPath` | Varsayılan şema sürüm 2 WinISOUtil profilidir. |
+| `DefaultConfigurationPath` | Varsayılan şema sürüm 3 WinISOUtil profilidir. Sürüm 2 migration uyarısıyla desteklenir. |
 | `WebhookUrl` | Final batch özetini alan isteğe bağlı HTTPS endpoint'tir. Kimlik bilgilerini tracked dosyalarda tutmayın. |
 | `Targets[].Id` | Yol, log ve `-TargetId` için kullanılan kararlı yerel hedef kimliğidir. |
 | `Targets[].Locale` | `tr-tr`, `en-us` veya `de-de` gibi UUP locale değeridir. |
-| `Targets[].ConfigurationPath` | İsteğe bağlı hedef bazlı şema sürüm 2 profil override değeridir. |
+| `Targets[].ConfigurationPath` | İsteğe bağlı hedef bazlı şema sürüm 2 veya 3 profil override değeridir. |
 | `Paths` | `SYSTEM` hesabının erişebildiği yerel tools, cache, staging, output, logs, working ve state kökleridir. |
 
 ## Operasyon Notları
@@ -168,7 +168,9 @@ geçişinde atomik olarak güncellenir; bu nedenle yarıda kesilen bir işlem so
 bilinen fazını ve log yolunu korur. State manifestleri, hedef bazlı ISO hash
 değerleri ve tamamlanan son batch sonucu `Paths.State` altında ve promote edilen
 ISO yanında tutulur. Batch ayrıca Application Event Log girdisi yazar. İsteğe
-bağlı HTTPS `WebhookUrl`, aynı özet JSON verisini alır. Güncel logu izlemek için:
+bağlı HTTPS `WebhookUrl`, aynı özet JSON verisini alır. Promote edilen her ISO
+yanında strict offline, no-op ve deferred post-login kontrollerini içeren
+`<iso>.validation.json` raporu da oluşturulur. Güncel logu izlemek için:
 
 ```powershell
 Get-Content D:\WinISOUtil\logs\automated-build-*.log -Wait -Tail 50
@@ -228,9 +230,12 @@ Get-WinEvent -FilterHashtable @{
 
 Final ISO yalnız doğrulama başarılı olursa promote edilir. Doğrulama
 Professional edition değerini, istenen locale bilgisini, seçilmiş build ve
-revision değerini, boot image, install image, WinRE yapısını ve korunan zorunlu
-provisioned app paketlerini kontrol eder. Promote edilen ISO yanında kaynak ve
-final SHA-256 değerlerini içeren bir JSON manifesti oluşturulur.
+revision değerini, boot image, install image, WinRE yapısını, korunan zorunlu
+provisioned app paketlerini ve profile-aware AppX, capability, optional-feature,
+servis ve registry state değerlerini kontrol eder. Post-login seçimleri deferred
+olarak raporlanır ve masaüstü BAT payload varlığı doğrulanır. Promote edilen ISO
+yanında kaynak, final ve validation-report SHA-256 değerlerini içeren bir JSON
+manifesti oluşturulur.
 
 | Exit code | Anlam |
 | --- | --- |

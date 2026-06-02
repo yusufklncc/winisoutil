@@ -13,6 +13,7 @@ param(
     [string]$IsoPath,
     [string]$ConfigurationPath,
     [string]$OutputIsoPath,
+    [string]$ValidationReportPath,
     [ValidateSet('tr', 'en')]
     [string]$Language,
     [ValidateRange(1, 999)]
@@ -48,8 +49,11 @@ $White = "White"
 
 # A global configuration object to store user selections throughout the session.
 $global:ScriptConfig = @{
+    SchemaVersion          = 3
     RemovedApps            = @()
     RemovedAppSelectors    = @()
+    RemovedCapabilities    = @()
+    DisabledFeatures       = @()
     RegistryTweaks         = @()
     EnabledFeatures        = @()
     ComponentServiceTweaks = @()
@@ -66,6 +70,9 @@ $script:IsoContentPath = Join-Path $script:WorkingDirectory 'iso'
 $script:MountPath = Join-Path $script:WorkingDirectory 'mount'
 $script:WorkspaceMarkerPath = Join-Path $script:WorkingDirectory $script:WorkspaceMarkerName
 $script:InstallImagePath = $null
+$script:ImportedConfigurationPath = $null
+
+Import-Module (Join-Path $PSScriptRoot 'automation\modules\Profile.Validation.psm1') -Force -ErrorAction Stop
 
 # --- ALL FUNCTION DEFINITIONS ---
 
@@ -288,70 +295,7 @@ function ConvertTo-StringArray {
 function ConvertTo-ValidatedConfiguration {
     param([Parameter(Mandatory)]$Configuration)
 
-    $schemaVersion = 1
-    if ($Configuration.PSObject.Properties.Name -contains 'SchemaVersion') {
-        $schemaVersion = [int]$Configuration.SchemaVersion
-    }
-    if ($schemaVersion -notin @(1, 2)) {
-        throw "Unsupported configuration schema version: $schemaVersion"
-    }
-
-    . (Join-Path $PSScriptRoot "src/tweaks.ps1")
-    . (Join-Path $PSScriptRoot "src/components.ps1")
-    . (Join-Path $PSScriptRoot "src/features.ps1")
-    . (Join-Path $PSScriptRoot "src/app-exclusion-list.ps1")
-
-    $registryTweaks = ConvertTo-StringArray -Value $Configuration.RegistryTweaks -PropertyName 'RegistryTweaks'
-    $componentTweaks = ConvertTo-StringArray -Value $Configuration.ComponentServiceTweaks -PropertyName 'ComponentServiceTweaks'
-    $enabledFeatures = ConvertTo-StringArray -Value $Configuration.EnabledFeatures -PropertyName 'EnabledFeatures'
-    $removedApps = ConvertTo-StringArray -Value $Configuration.RemovedApps -PropertyName 'RemovedApps'
-    $removedAppSelectors = ConvertTo-StringArray -Value $Configuration.RemovedAppSelectors -PropertyName 'RemovedAppSelectors'
-    if ($schemaVersion -eq 2 -and $removedApps.Count -gt 0) {
-        throw "Schema version 2 configurations must use RemovedAppSelectors instead of RemovedApps."
-    }
-
-    $unknownRegistryTweaks = @($registryTweaks | Where-Object { $_ -notin $allTweaks.ID })
-    $unknownComponentTweaks = @($componentTweaks | Where-Object { $_ -notin $allComponentTweaks.ID })
-    $unknownFeatures = @($enabledFeatures | Where-Object { $_ -notin $allFeatures.FeatureName })
-    if ($unknownRegistryTweaks.Count -gt 0) {
-        throw "Unknown registry tweak IDs: $($unknownRegistryTweaks -join ', ')"
-    }
-    if ($unknownComponentTweaks.Count -gt 0) {
-        throw "Unknown component or service tweak IDs: $($unknownComponentTweaks -join ', ')"
-    }
-    if ($unknownFeatures.Count -gt 0) {
-        throw "Unknown Windows feature IDs: $($unknownFeatures -join ', ')"
-    }
-
-    foreach ($packageName in $removedApps) {
-        if ($packageName -cnotmatch '^[A-Za-z0-9._~\-]+$') {
-            throw "Invalid provisioned app package name: $packageName"
-        }
-        foreach ($pattern in $appExclusionList) {
-            if ($packageName -like $pattern) {
-                throw "The configuration attempts to remove a protected app package: $packageName"
-            }
-        }
-    }
-    foreach ($selector in $removedAppSelectors) {
-        if ($selector -cnotmatch '^[A-Za-z0-9._~\-]+$') {
-            throw "Invalid provisioned app selector: $selector"
-        }
-        foreach ($pattern in $appExclusionList) {
-            if ($selector -like $pattern) {
-                throw "The configuration attempts to remove a protected app selector: $selector"
-            }
-        }
-    }
-
-    return @{
-        SchemaVersion          = $schemaVersion
-        RemovedApps            = @($removedApps | Select-Object -Unique)
-        RemovedAppSelectors    = @($removedAppSelectors | Select-Object -Unique)
-        RegistryTweaks         = @($registryTweaks | Select-Object -Unique)
-        EnabledFeatures        = @($enabledFeatures | Select-Object -Unique)
-        ComponentServiceTweaks = @($componentTweaks | Select-Object -Unique)
-    }
+    return ConvertTo-ValidatedWinIsoUtilConfiguration -Configuration $Configuration -RepositoryRoot $PSScriptRoot
 }
 
 # Asks the user if they want to import settings from a .json file to run in automatic mode.
@@ -390,11 +334,21 @@ function Import-Configuration {
                 Write-ColorText ($langStrings.importReadingFile -f $Path) $Green
                 $configContent = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
                 $validatedConfiguration = ConvertTo-ValidatedConfiguration -Configuration $configContent
+                $global:ScriptConfig.SchemaVersion = $validatedConfiguration.SchemaVersion
                 $global:ScriptConfig.RemovedApps = $validatedConfiguration.RemovedApps
                 $global:ScriptConfig.RemovedAppSelectors = $validatedConfiguration.RemovedAppSelectors
+                $global:ScriptConfig.RemovedCapabilities = $validatedConfiguration.RemovedCapabilities
+                $global:ScriptConfig.DisabledFeatures = $validatedConfiguration.DisabledFeatures
                 $global:ScriptConfig.RegistryTweaks = $validatedConfiguration.RegistryTweaks
                 $global:ScriptConfig.EnabledFeatures = $validatedConfiguration.EnabledFeatures
                 $global:ScriptConfig.ComponentServiceTweaks = $validatedConfiguration.ComponentServiceTweaks
+                $script:ImportedConfigurationPath = [System.IO.Path]::GetFullPath($Path)
+                if ($validatedConfiguration.SchemaVersion -eq 2) {
+                    Write-ColorText $langStrings.importSchemaV2MigrationWarning $Yellow
+                }
+                if ($validatedConfiguration.LegacyMappings.Count -gt 0) {
+                    Write-ColorText ($langStrings.importLegacyMappings -f ($validatedConfiguration.LegacyMappings -join ', ')) $Yellow
+                }
                 Write-ColorText $langStrings.importSuccess $Green
                 Start-Sleep -Seconds 2
                 return $true # Return true to signal automatic mode.
@@ -430,10 +384,12 @@ function Export-Configuration {
         $exportPath = $SaveFileDialog.FileName
         try {
             $exportObject = @{
-                SchemaVersion          = 2
+                SchemaVersion          = 3
                 Description            = $langStrings.exportConfigDesc
                 DateCreated            = (Get-Date).ToString("yyyy-MM-dd")
                 RemovedAppSelectors    = $global:ScriptConfig.RemovedAppSelectors
+                RemovedCapabilities    = $global:ScriptConfig.RemovedCapabilities
+                DisabledFeatures       = $global:ScriptConfig.DisabledFeatures
                 RegistryTweaks         = $global:ScriptConfig.RegistryTweaks
                 EnabledFeatures        = $global:ScriptConfig.EnabledFeatures
                 ComponentServiceTweaks = $global:ScriptConfig.ComponentServiceTweaks
@@ -752,7 +708,7 @@ function Add-Drivers {
     if ($script:runMode -ne 'AUTOMATIC') { Suspend-Script }
 }
 
-# Allows removing Windows components and disabling services based on definitions in an external file.
+# Allows disabling services based on definitions in an external file.
 function Set-ComponentsAndServices {
     try {
         . (Join-Path $PSScriptRoot "src/components.ps1")
@@ -823,39 +779,6 @@ function Set-ComponentsAndServices {
             [gc]::Collect(); [gc]::WaitForPendingFinalizers()
             if ($systemHiveLoaded) {
                 Invoke-Reg -Arguments @('UNLOAD', 'HKLM\TEMPSYSTEM') | Out-Null
-            }
-        }
-    }
-
-    $componentsToRemove = $tweaksToApply | Where-Object { $_.Type -eq 'Component' }
-    if ($componentsToRemove) {
-        Write-ColorText $langStrings.compSvcRemovingComponents $Yellow
-        foreach ($tweak in $componentsToRemove) {
-            $langKey = "comp_$($tweak.ID)_desc"
-            $componentName = ($global:langStrings[$langKey].Split('(')[0]).Trim()
-            Write-ColorText ($langStrings.compSvcProcessing -f $componentName) $Yellow
-            try {
-                $featureInfo = Invoke-Dism -Arguments @("/Image:$($script:MountPath)", '/Get-FeatureInfo', "/FeatureName:$($tweak.FeatureName)") -PassThru -Quiet
-                $featureStateLine = $featureInfo | Select-String "State"
-                if ($featureStateLine) {
-                    $featureState = $featureStateLine.Line.Split(':')[1].Trim()
-                    if ($featureState -eq 'Enabled') {
-                        Write-ColorText $langStrings.compSvcStateEnabled $Yellow
-                        Invoke-Dism -Arguments @("/Image:$($script:MountPath)", '/Disable-Feature', "/FeatureName:$($tweak.FeatureName)", '/Remove', '/NoRestart') -Quiet
-                        Write-ColorText $langStrings.compSvcRemoveSuccess $Green
-                    } else {
-                        Write-ColorText ($langStrings.compSvcStateNotEnabled -f $featureState) $Cyan
-                    }
-                } else {
-                    Write-ColorText $langStrings.compSvcStateError $Cyan
-                }
-            } catch {
-                if ($_.Exception.Message -match '0x800f080c') {
-                    Write-ColorText ($langStrings.compSvcFeatureAbsent -f $tweak.FeatureName) $Cyan
-                } else {
-                    Write-ColorText ($langStrings.compSvcCriticalError -f $_) $Red
-                    if (-not $runInManualMode) { throw }
-                }
             }
         }
     }
@@ -1045,7 +968,9 @@ function Set-Registry {
                 New-Item -ItemType Directory -Path $desktopPath -Force | Out-Null
             }
             $scriptPathInWindows = '%SystemRoot%\Setup\Scripts\post-setup.ps1'
-            $batContent = $langStrings.regRunnerBatBody -f $scriptPathInWindows
+            $requiresNetwork = @($tweaksToApply | Where-Object { $_.Action -eq 'SetupScript' -and $_.RequiresNetwork }).Count -gt 0
+            $networkCheck = if ($requiresNetwork) { $langStrings.regRunnerNetworkCheck } else { '' }
+            $batContent = $langStrings.regRunnerBatBody -f $scriptPathInWindows, $networkCheck
             $batFileName = $langStrings.regRunnerBatTitle
             $batContent | Out-File -FilePath (Join-Path $desktopPath $batFileName) -Encoding OEM
             Write-ColorText ($langStrings.regManualRunnerCreated -f $batFileName) $Green
@@ -1213,6 +1138,80 @@ function Remove-WindowsApps {
     if ($script:runMode -ne 'AUTOMATIC') { Suspend-Script }
 }
 
+function Remove-WindowsCapabilities {
+    . (Join-Path $PSScriptRoot 'src/capabilities.ps1')
+    $capabilitiesToRemove = [System.Collections.Generic.List[object]]::new()
+
+    if ($script:runMode -eq 'AUTOMATIC') {
+        $selected = $global:ScriptConfig.RemovedCapabilities
+        $capabilitiesToRemove.AddRange([object[]]@($allRemovableCapabilities | Where-Object { $selected -contains $_.Name }))
+    } else {
+        $menuOptions = @($allRemovableCapabilities | ForEach-Object { $global:langStrings["capability_$($_.ID)_desc"] })
+        $selection = Get-UserChoice -Title $langStrings.capabilityRemoveTitle -Options $menuOptions -MultiSelect $true
+        if ($selection -eq 'go_back' -or !$selection) { return }
+        $selection | ForEach-Object { $capabilitiesToRemove.Add($allRemovableCapabilities[$_ - 1]) }
+        $global:ScriptConfig.RemovedCapabilities = @($capabilitiesToRemove.Name)
+    }
+
+    foreach ($capability in $capabilitiesToRemove) {
+        try {
+            $info = Invoke-Dism -Arguments @("/Image:$($script:MountPath)", '/Get-CapabilityInfo', "/CapabilityName:$($capability.Name)") -PassThru -Quiet
+            $state = (($info | Select-String '^\s*State\s*:').Line -split ':', 2)[1].Trim()
+            if ($state -eq 'Installed') {
+                Invoke-Dism -Arguments @("/Image:$($script:MountPath)", '/Remove-Capability', "/CapabilityName:$($capability.Name)") -Quiet
+                Write-ColorText ($langStrings.capabilityRemoveSuccess -f $capability.Name) $Green
+            } else {
+                Write-ColorText ($langStrings.capabilityRemoveNoOp -f $capability.Name, $state) $Cyan
+            }
+        } catch {
+            if ($capability.AllowAbsent -and $_.Exception.Message -match '0x800f080c|not found|unknown') {
+                Write-ColorText ($langStrings.capabilityRemoveAbsent -f $capability.Name) $Cyan
+            } else {
+                Write-ColorText ($langStrings.capabilityRemoveError -f $capability.Name, $_.Exception.Message) $Red
+                if ($script:runMode -eq 'AUTOMATIC') { throw }
+            }
+        }
+    }
+    if ($script:runMode -ne 'AUTOMATIC') { Suspend-Script }
+}
+
+function Disable-WindowsFeatures {
+    . (Join-Path $PSScriptRoot 'src/removable-features.ps1')
+    $featuresToDisable = [System.Collections.Generic.List[object]]::new()
+
+    if ($script:runMode -eq 'AUTOMATIC') {
+        $selected = $global:ScriptConfig.DisabledFeatures
+        $featuresToDisable.AddRange([object[]]@($allRemovableFeatures | Where-Object { $selected -contains $_.FeatureName }))
+    } else {
+        $menuOptions = @($allRemovableFeatures | ForEach-Object { $global:langStrings["disabledFeature_$($_.FeatureName)_desc"] })
+        $selection = Get-UserChoice -Title $langStrings.disabledFeatureTitle -Options $menuOptions -MultiSelect $true
+        if ($selection -eq 'go_back' -or !$selection) { return }
+        $selection | ForEach-Object { $featuresToDisable.Add($allRemovableFeatures[$_ - 1]) }
+        $global:ScriptConfig.DisabledFeatures = @($featuresToDisable.FeatureName)
+    }
+
+    foreach ($feature in $featuresToDisable) {
+        try {
+            $info = Invoke-Dism -Arguments @("/Image:$($script:MountPath)", '/Get-FeatureInfo', "/FeatureName:$($feature.FeatureName)") -PassThru -Quiet
+            $state = (($info | Select-String '^\s*State\s*:').Line -split ':', 2)[1].Trim()
+            if ($state -in @('Disabled with Payload Removed', 'Removed')) {
+                Write-ColorText ($langStrings.disabledFeatureNoOp -f $feature.FeatureName, $state) $Cyan
+            } else {
+                Invoke-Dism -Arguments @("/Image:$($script:MountPath)", '/Disable-Feature', "/FeatureName:$($feature.FeatureName)", '/Remove', '/NoRestart') -Quiet
+                Write-ColorText ($langStrings.disabledFeatureSuccess -f $feature.FeatureName) $Green
+            }
+        } catch {
+            if ($feature.AllowAbsent -and $_.Exception.Message -match '0x800f080c|not found|unknown') {
+                Write-ColorText ($langStrings.disabledFeatureAbsent -f $feature.FeatureName) $Cyan
+            } else {
+                Write-ColorText ($langStrings.disabledFeatureError -f $feature.FeatureName, $_.Exception.Message) $Red
+                if ($script:runMode -eq 'AUTOMATIC') { throw }
+            }
+        }
+    }
+    if ($script:runMode -ne 'AUTOMATIC') { Suspend-Script }
+}
+
 # Allows enabling optional Windows features based on definitions in an external file.
 function Enable-Features {
     try {
@@ -1269,6 +1268,7 @@ function Enable-Features {
             Write-ColorText ($langStrings.featureEnableSuccess -f $featureNameDisplay) $Green
         } catch {
             Write-ColorText ($langStrings.featureEnableError -f $featureNameDisplay, $_.Exception.Message) $Red
+            if ($script:runMode -eq 'AUTOMATIC') { throw }
         }
     }
 
@@ -1309,6 +1309,15 @@ function Complete-Image {
     Write-Host ($langStrings.completeOutputIsoPath -f $outputIso) -ForegroundColor Green
     Remove-Item -LiteralPath (Join-Path $script:MountPath 'dism.log') -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 3
+    $profileValidation = $null
+    if ($Unattended) {
+        Write-ColorText $langStrings.completeValidatingProfile $Yellow
+        $profileValidation = Invoke-WinIsoUtilProfileValidation -MountPath $script:MountPath -Configuration $global:ScriptConfig -RepositoryRoot $PSScriptRoot -DismPath $global:dismPath
+        if ($profileValidation.OverallStatus -ne 'Passed') {
+            $failedMessages = @($profileValidation.FailedChecks | ForEach-Object { "$($_.Type)/$($_.Id): $($_.Message)" })
+            throw "Offline profile validation failed: $($failedMessages -join '; ')"
+        }
+    }
     try {
         $dismPath = $global:dismPath
         $mountPath = $script:MountPath
@@ -1354,6 +1363,11 @@ function Complete-Image {
 
         if ($LASTEXITCODE -ne 0) { throw ("oscdimg Exit Code: $LASTEXITCODE") }
 
+        if ($Unattended) {
+            $reportPath = if ([string]::IsNullOrWhiteSpace($ValidationReportPath)) { "$outputIso.validation.json" } else { [System.IO.Path]::GetFullPath($ValidationReportPath) }
+            Write-WinIsoUtilValidationReport -Validation $profileValidation -ConfigurationPath $script:ImportedConfigurationPath -IsoPath $outputIso -OutputPath $reportPath | Out-Null
+            Write-ColorText ($langStrings.completeValidationReport -f $reportPath) $Green
+        }
         Write-ColorText ($langStrings.completeIsoSuccess -f $outputIso) $Green
         Cleanup
         return $true
@@ -1522,6 +1536,8 @@ if ($script:runMode -eq 'AUTOMATIC') {
     if ($global:ScriptConfig.ComponentServiceTweaks.Count -gt 0) { Set-ComponentsAndServices }
     if ($global:ScriptConfig.RegistryTweaks.Count -gt 0) { Set-Registry }
     if ($global:ScriptConfig.RemovedApps.Count -gt 0 -or $global:ScriptConfig.RemovedAppSelectors.Count -gt 0) { Remove-WindowsApps }
+    if ($global:ScriptConfig.RemovedCapabilities.Count -gt 0) { Remove-WindowsCapabilities }
+    if ($global:ScriptConfig.DisabledFeatures.Count -gt 0) { Disable-WindowsFeatures }
     if ($global:ScriptConfig.EnabledFeatures.Count -gt 0) { Enable-Features }
     Write-ColorText "`n$($langStrings.execAutoModeCompleted)" $Cyan
 
@@ -1555,13 +1571,14 @@ if ($script:runMode -eq 'MANUAL') {
         $menuOptions = @(
             $langStrings.mainMenu1, $langStrings.mainMenu2, $langStrings.mainMenu3,
             $langStrings.mainMenu4, $langStrings.mainMenu5, $langStrings.mainMenu6,
-            $langStrings.mainMenu7, $langStrings.mainMenu8, $langStrings.mainMenu9
+            $langStrings.mainMenu7, $langStrings.mainMenu8, $langStrings.mainMenu9,
+            $langStrings.mainMenu10, $langStrings.mainMenu11
         )
         for($i=0; $i -lt $menuOptions.Length; $i++){
             $color = $White
-            if($i -eq 6) { $color = $Cyan }
-            if($i -eq 7) { $color = $Green }
-            if($i -eq 8) { $color = $Red }
+            if($i -eq 8) { $color = $Cyan }
+            if($i -eq 9) { $color = $Green }
+            if($i -eq 10) { $color = $Red }
             Write-ColorText "$($i+1). $($menuOptions[$i])" $color
         }
         Write-Host ""
@@ -1572,10 +1589,12 @@ if ($script:runMode -eq 'MANUAL') {
             "3" { Set-ComponentsAndServices }
             "4" { Set-Registry }
             "5" { Remove-WindowsApps }
-            "6" { Enable-Features }
-            "7" { Export-Configuration }
-            "8" { if (Complete-Image -Path $OutputIsoPath) { $choice = "exit" } }
-            "9" { Cleanup; $choice = "exit" }
+            "6" { Remove-WindowsCapabilities }
+            "7" { Disable-WindowsFeatures }
+            "8" { Enable-Features }
+            "9" { Export-Configuration }
+            "10" { if (Complete-Image -Path $OutputIsoPath) { $choice = "exit" } }
+            "11" { Cleanup; $choice = "exit" }
             default { Write-Host $langStrings.invalidChoice -ForegroundColor Red; Start-Sleep -Seconds 2 }
         }
     } while ($choice -ne "exit")

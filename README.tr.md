@@ -27,7 +27,7 @@ Bu araç, hem etkileşimli menü tabanlı bir **Manuel Mod**'a hem de daha önce
 - **Detaylı Yapılandırma**:
   - **Gizlilik ve Telemetri**: Veri toplama ve hata raporlama servislerini devre dışı bırakın.
   - **Arayüz İnce Ayarları**: Görev çubuğunu sola hizalayın, masaüstü simgelerini yapılandırın ve Dosya Gezgini'nde ince ayarlar yapın.
-  - **Bileşen Kaldırma**: Internet Explorer ve Windows Media Player gibi eski bileşenleri kaldırın.
+  - **Kontrollü Debloat Kataloğu**: Opt-in provisioned AppX paketlerini, muhafazakar capability listesini ve eski optional feature öğelerini kaldırın.
 - **Güvenilirlik ve Bağımlılık Yönetimi**:
   - Bir `trap` mekanizması, bir hata oluşması durumunda güvenli bir çıkış ve temizlik sağlayarak "kirli" bir durumu (örneğin, bağlanmış bir imaj) önler.
   - Geçici dosyalar yalnızca `%TEMP%\WinISOUtil` altındaki işaretli ve araca ait çalışma alanından silinir.
@@ -76,7 +76,7 @@ Her seferinde aynı seçenekleri manuel olarak seçmek yerine, bir yapılandırm
 1.  **Ayarları Dışa Aktarma**:
 
     - Betiği etkileşimli modda çalıştırın ve menülerden istediğiniz tüm ince ayarları, bileşen kaldırma ve uygulama temizleme işlemlerini seçin.
-    - Ana menüden, mevcut seçimlerinizi bir yapılandırma dosyasına kaydetmek için **"7. Ayarları Dışa Aktar (.json)"** seçeneğini seçin.
+    - Ana menüden, mevcut seçimlerinizi bir yapılandırma dosyasına kaydetmek için **"9. Ayarları Dışa Aktar (.json)"** seçeneğini seçin.
 
 2.  **Ayarları İçe Aktarma**:
     - Betiği bir sonraki çalıştırdığınızda, bir ISO seçtikten sonra bir yapılandırma dosyası içe aktarmak isteyip istemediğiniz sorulacaktır.
@@ -91,14 +91,15 @@ Her seferinde aynı seçenekleri manuel olarak seçmek yerine, bir yapılandırm
   -IsoPath 'D:\ISO\Windows11.iso' `
   -ConfigurationPath '.\config\desktop.json' `
   -EditionIndex 1 `
-  -OutputIsoPath 'D:\ISO\out\Windows11-custom.iso'
+  -OutputIsoPath 'D:\ISO\out\Windows11-by-WinISOUtil.iso'
 ```
 
-Yeni export dosyaları yapılandırma şeması sürüm 2'yi ve kararlı
-`RemovedAppSelectors` değerlerini kullanır. Böylece aynı profil güncellenmiş ISO
-build'leri ve locale hedefleri arasında tekrar kullanılabilir. Sürüm 1 profilleri
-tek seferlik çalışmalar için okunmaya devam eder. Sıfır dokunuş otomasyonu sürüm
-2 profil zorunluluğu koyar. Profil yaşam döngüsü için
+Yeni export dosyaları yapılandırma şeması sürüm 3'ü kullanır. Kararlı
+`RemovedAppSelectors`, `RemovedCapabilities` ve `DisabledFeatures` değerleri
+incelenmiş debloat seçimlerini güncellenmiş ISO build'leri ve locale hedefleri
+arasında tekrar kullanılabilir tutar. Sürüm 1 profilleri tek seferlik çalışmalar
+için okunmaya devam eder. Sürüm 2 profilleri otomasyonda migration uyarısıyla
+desteklenir. Profil yaşam döngüsü için
 [`docs/PROFILE.tr.md`](docs/PROFILE.tr.md) dosyasına bakın.
 
 ### Katılımsız CLI Referansı
@@ -108,6 +109,7 @@ tek seferlik çalışmalar için okunmaya devam eder. Sıfır dokunuş otomasyon
 | `-IsoPath` | Girdi Windows ISO dosyası. Katılımsız modda zorunludur. |
 | `-ConfigurationPath` | Export edilmiş JSON profilidir. Katılımsız modda zorunludur. |
 | `-OutputIsoPath` | Final ISO yoludur. Katılımsız modda zorunludur. |
+| `-ValidationReportPath` | ISO yanındaki doğrulama raporu için isteğe bağlı çıktı yoludur. Varsayılan `<iso>.validation.json` değeridir. |
 | `-EditionIndex` | Özelleştirilecek imaj indeksidir. ISO birden fazla edition içeriyorsa zorunludur. |
 | `-Language` | Araç mesaj dili: `tr` veya `en`. Katılımsız modda varsayılan `en` değeridir. |
 | `-UpdatesPath` | `.msu` güncelleme paketlerini içeren isteğe bağlı klasördür. |
@@ -120,8 +122,8 @@ tek seferlik çalışmalar için okunmaya devam eder. Sıfır dokunuş otomasyon
 Önerilen sıfır dokunuş modeli GitHub Actions yerine dedicated bir Windows 11
 makine veya VM üzerinde çalışır. Günlük SYSTEM görevi uygun Retail UUP build'ini
 keşfeder, Microsoft CDN hostlarından hash doğrulamalı payload dosyalarını indirir,
-yapılandırılmış her locale için ayrı Windows 11 Pro ISO üretir, şema sürüm 2
-profilini uygular, sonucu doğrular ve belirlenen sayıda başarılı çıktıyı tutar.
+yapılandırılmış her locale için ayrı Windows 11 Pro ISO üretir, incelenmiş
+profili uygular, sonucu doğrular ve belirlenen sayıda başarılı çıktıyı tutar.
 
 Kurulum ve işletim için [`docs/AUTOMATION.tr.md`](docs/AUTOMATION.tr.md)
 dosyasına bakın.
@@ -129,7 +131,7 @@ dosyasına bakın.
 ## Dokümantasyon
 
 - [`docs/AUTOMATION.tr.md`](docs/AUTOMATION.tr.md): günlük çoklu locale UUP otomasyonu
-- [`docs/PROFILE.tr.md`](docs/PROFILE.tr.md): şema sürüm 2 profillerini oluşturma ve koruma
+- [`docs/PROFILE.tr.md`](docs/PROFILE.tr.md): şema sürüm 3 profillerini oluşturma, migrate etme ve koruma
 - [`docs/TROUBLESHOOTING.tr.md`](docs/TROUBLESHOOTING.tr.md): kurtarma ve teşhis runbook'u
 - [`docs/TESTING.tr.md`](docs/TESTING.tr.md): fixture, canlı API ve Hyper-V doğrulaması
 - [`SECURITY.md`](SECURITY.md): güven sınırları ve tedarik zinciri politikası
@@ -143,7 +145,9 @@ Proje modüler olacak şekilde tasarlanmıştır. `src/` dizinindeki dosyaları 
 
 - **`src\languages.ps1`**: Desteklenen diller için tüm arayüz metinlerini içerir. Yerelleştirmeyi genişletmek için buraya yeni bir dil bloğu ekleyin.
 - **`src\tweaks.ps1`**: Mevcut tüm kayıt defteri ince ayarlarını tanımlar. Yeni bir ince ayar oluşturmak için bu listeye kendi `[PSCustomObject]`'inizi ekleyebilirsiniz.
-- **`src\components.ps1`**: Kaldırılabilecek veya devre dışı bırakılabilecek Windows bileşenlerini ve servislerini listeler.
+- **`src\components.ps1`**: Offline uygulanabilecek servis ayarlarını listeler.
+- **`src\capabilities.ps1`**: Muhafazakar removable capability allow-list değerlerini tanımlar.
+- **`src\removable-features.ps1`**: Muhafazakar disable/remove optional-feature allow-list değerlerini tanımlar.
 - **`src\features.ps1`**: `.NET Framework 3.5` gibi etkinleştirilebilecek isteğe bağlı Windows özelliklerini tanımlar.
 - **`src\app-exclusion-list.ps1`**: Sistemin bozulmasını önlemek için kaldırma listesinden hariç tutulan kritik sistem uygulamalarının (Microsoft Store gibi) bir listesini içerir.
 
@@ -165,6 +169,7 @@ Değişiklik göndermeden önce yerel fixture kontrollerini çalıştırın:
 ```powershell
 .\tests\Test-Static.ps1
 .\tests\Test-Automation.ps1
+.\tests\Test-ProfileValidation.ps1
 ```
 
 Canlı UUP API smoke testi ve Hyper-V kurulum testi

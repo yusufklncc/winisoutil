@@ -1,66 +1,61 @@
-# Şema Sürüm 2 Profilleri
+# Şema Sürüm 3 Profilleri
 
-WinISOUtil profilleri, etkileşimli import ve katılımsız çalışmalar için tekrar
-kullanılabilir özelleştirme seçimlerini saklar. Sıfır dokunuş UUP otomasyonu
-`SchemaVersion: 2` zorunluluğu koyar.
+WinISOUtil profilleri etkileşimli import ve katılımsız çalışmalar için
+incelenmiş özelleştirme seçimlerini saklar. Yeni export dosyaları
+`SchemaVersion: 3` kullanır.
 
-## Neden Sürüm 2
+## Sözleşme
 
-Windows provisioned app paket adları, aylık build'ler arasında değişebilen sürüm
-bilgileri içerir. Sürüm 2, kararlı uygulama `DisplayName` değerlerini
-`RemovedAppSelectors` olarak export eder. Katılımsız çalışma sırasında
-WinISOUtil bu seçicileri mount edilmiş imajdaki paketlerle eşler, güncel paket
-adlarını kaldırır ve seçilmiş uygulamaların artık mevcut olmadığını doğrular.
-
-Sürüm 1 profilleri tek seferlik kullanım için okunmaya devam eder. Zamanlanmış
-otomasyonda kullanmayın.
-
-## İncelenmiş Profil Oluşturma
-
-1. Yükseltilmiş bir PowerShell penceresi açın.
-2. WinISOUtil'i yerel checkout üzerinden başlatın:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\winisoutil.ps1
-```
-
-3. Güncel bir baseline ISO ve otomasyonda kullanacağınız edition değerini seçin.
-4. Korumak istediğiniz component, servis, registry, uygulama kaldırma ve isteğe
-   bağlı feature seçimlerini uygulayın.
-5. Ana menüden `7. Ayarları Dışa Aktar (.json)` seçeneğini seçin.
-6. Export edilen profili aşağıdaki gibi yerel bir yapılandırma klasöründe tutun:
-
-```text
-D:\WinISOUtil\config\desktop-v2.json
-```
-
-7. Ortaya çıkan ISO'yu disposable bir Hyper-V VM üzerinde mount edin veya kurun.
-   Beklenen uygulamaları, kurulum akışını, ağı, servicing ve kurtarma davranışını
-   doğrulayın.
-
-Feature sürümü değiştikten veya önemli özelleştirmeler yaptıktan sonra profili
-tekrar inceleyin. Kararlı seçiciler aylık bakımı azaltır ancak kurulum
-doğrulamasının yerini tutmaz.
-
-## Minimal Profil
-
-Kaldırma veya tweak gerekmiyorsa
-[`../automation/profile-v2.example.json`](../automation/profile-v2.example.json)
-dosyasını kullanın:
+Sürüm 2, aylık AppX paket sürümü değişiklikleri incelenmiş kaldırma seçimlerini
+bozmasın diye kararlı `RemovedAppSelectors` değerlerini ekledi. Sürüm 3 kararlı
+`RemovedCapabilities` ve `DisabledFeatures` dizilerini ekler; servis seçimlerini
+`ComponentServiceTweaks` altında ayrı tutar.
 
 ```json
 {
-  "SchemaVersion": 2,
-  "Description": "Example unattended WinISOUtil profile",
+  "SchemaVersion": 3,
   "RemovedAppSelectors": [],
+  "RemovedCapabilities": [],
+  "DisabledFeatures": [],
   "RegistryTweaks": [],
   "EnabledFeatures": [],
   "ComponentServiceTweaks": []
 }
 ```
 
-Dizilerdeki ID değerleri `src\` altındaki tanımlara göre doğrulanır. Bilinmeyen
-ID değerleri fail closed davranışıyla reddedilir.
+Bütün ID değerleri `src\` altındaki allow-list tanımlarına göre doğrulanır.
+Bilinmeyen ID değerleri ve enable/disable çakışmaları fail closed davranışıyla
+reddedilir. Sürüm 1 profilleri tek seferlik kullanım için okunur. Sürüm 2
+profilleri zamanlanmış otomasyonda migration uyarısıyla desteklenir.
+
+## İncelenmiş Profil Oluşturma
+
+1. Yükseltilmiş PowerShell penceresi açıp `.\winisoutil.ps1` çalıştırın.
+2. Güncel baseline ISO ve otomasyonda kullanacağınız edition değerini seçin.
+3. İncelenmiş servis, registry, AppX, capability, feature-disable ve
+   feature-enable tercihlerini uygulayın.
+4. Ana menüden `9. Ayarları Dışa Aktar (.json)` seçeneğini seçin.
+5. Profili public repo dışında tutun, örneğin:
+
+```text
+D:\WinISOUtil\config\desktop-v3.json
+```
+
+6. Ortaya çıkan ISO'yu disposable Hyper-V VM üzerinde doğrulayın.
+
+## Sürüm 2 Profilini Migrate Etme
+
+Migration komutu mevcut profili değiştirmeden önce timestamp içeren yedek
+oluşturur:
+
+```powershell
+.\automation\Convert-WinIsoUtilProfile.ps1 `
+  -Path 'D:\WinISOUtil\config\desktop-v2.json' `
+  -InPlace
+```
+
+Eski `RemoveIE` ve `RemoveWMP` değerleri `DisabledFeatures` alanına normalize
+edilir. Mevcut AppX, registry, feature-enable ve servis seçimleri değişmez.
 
 ## Profili Doğrudan Kullanma
 
@@ -69,31 +64,33 @@ ID değerleri fail closed davranışıyla reddedilir.
   -Unattended `
   -Language tr `
   -IsoPath 'D:\ISO\Windows11.iso' `
-  -ConfigurationPath 'D:\WinISOUtil\config\desktop-v2.json' `
+  -ConfigurationPath 'D:\WinISOUtil\config\desktop-v3.json' `
   -EditionIndex 1 `
   -OutputIsoPath 'D:\ISO\out\Windows11-by-WinISOUtil.iso'
 ```
 
-Girdi ISO tek install image içeriyorsa `-EditionIndex` yazılmayabilir.
+Katılımsız çıktı yanında `<iso>.validation.json` raporu oluşturulur. Strict
+offline uyumsuzluklar ISO tamamlamasını durdurur.
 
 ## Profilleri Zamanlanmış Otomasyonda Kullanma
 
-Bir hedef kendi `ConfigurationPath` değerini tanımlamadıkça
-`DefaultConfigurationPath` bütün hedeflere uygulanır:
+Bir hedef override tanımlamadıkça `DefaultConfigurationPath` bütün hedeflere
+uygulanır:
 
 ```json
 {
-  "DefaultConfigurationPath": "D:\\WinISOUtil\\config\\desktop-v2.json",
+  "DefaultConfigurationPath": "D:\\WinISOUtil\\config\\desktop-v3.json",
   "Targets": [
     { "Id": "tr-tr-pro", "Locale": "tr-tr" },
     {
       "Id": "de-de-pro",
       "Locale": "de-de",
-      "ConfigurationPath": "D:\\WinISOUtil\\config\\desktop-de-v2.json"
+      "ConfigurationPath": "D:\\WinISOUtil\\config\\desktop-de-v3.json"
     }
   ]
 }
 ```
 
-Üretim profillerini public repo dışında tutun. Yerel operasyonel yapılandırma
-olarak yedekleyin ve değişiklikleri kullanmadan önce inceleyin.
+Feature sürümü veya anlamlı özelleştirme değişiklikleri sonrasında profili
+tekrar inceleyin. Kararlı ID değerleri aylık bakımı azaltır ancak kurulum
+doğrulamasının yerini tutmaz.

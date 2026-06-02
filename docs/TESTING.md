@@ -12,13 +12,29 @@ Run these checks from the repository root after code or documentation changes:
 ```powershell
 .\tests\Test-Static.ps1
 .\tests\Test-Automation.ps1
+.\tests\Test-ProfileValidation.ps1
 git diff --check
 ```
 
 `Test-Static.ps1` parses PowerShell files and checks localization and critical
 invariants. `Test-Automation.ps1` validates provider fixtures, settings
 examples, supply-chain restrictions, recovery hooks, logging behavior, and
-output naming.
+output naming. `Test-ProfileValidation.ps1` verifies schema migration, legacy
+normalization, fail-closed catalogs, desired-state no-ops, strict checks, and
+deferred post-login reporting without mounting a Windows image.
+
+## Verifier-Only Check
+
+Validate an existing ISO without running UUP assembly or debloat again:
+
+```powershell
+.\automation\Test-WinIsoUtilIso.ps1 `
+  -IsoPath 'D:\WinISOUtil\output\tr-tr-pro\Windows11-Pro-tr-tr-25H2-26200.8524-custom.iso' `
+  -ConfigurationPath 'D:\WinISOUtil\config\desktop-v3.json'
+```
+
+The command mounts the final install image read-only, runs profile-aware checks,
+and writes `<iso>.validation.json`.
 
 ## Live UUP API Smoke Test
 
@@ -51,8 +67,9 @@ Run one locale manually before enabling a scheduled batch:
 ```
 
 The automation mounts the final ISO and verifies the Professional image,
-locale, selected build and revision, boot image, WinRE structure, and protected
-required apps before promoting the output.
+locale, selected build and revision, boot image, WinRE structure, protected
+required apps, strict offline profile state, and deferred post-login artifacts
+before promoting the output.
 
 ## Hyper-V Installation Smoke Test
 
@@ -68,5 +85,7 @@ change, profile change, and servicing logic change:
    and Windows Update remain usable.
 7. Confirm selected removed apps, services, features, and registry choices
    behave as intended.
+8. Run the desktop post-login BAT manually and confirm the Search icon behavior.
 
-Keep the ISO sibling JSON manifest and the relevant logs with the test record.
+Keep the ISO sibling manifest, validation JSON, and relevant logs with the test
+record.
