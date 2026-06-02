@@ -499,10 +499,17 @@ function Materialize-UupFiles {
     )
 
     New-Item -ItemType Directory -Path $DestinationDirectory -Force -ErrorAction Stop | Out-Null
+    Write-AutomationLog -Message "Materializing $($Entries.Count) UUP payload files into $DestinationDirectory."
+    $processed = 0
     foreach ($entry in $Entries) {
         $cachedPath = Get-CachedPayload -Entry $entry -PayloadCacheDirectory $PayloadCacheDirectory
         Copy-OrLinkFile -Source $cachedPath -Destination (Join-Path $DestinationDirectory $entry.Name)
+        $processed++
+        if ($processed % 250 -eq 0) {
+            Write-AutomationLog -Message "Materialized $processed of $($Entries.Count) UUP payload files."
+        }
     }
+    Write-AutomationLog -Message "Completed UUP payload materialization: $processed files."
 }
 
 function Materialize-TargetUupFiles {
@@ -524,6 +531,7 @@ function Materialize-TargetUupFiles {
                 @(Get-ManifestEntries -Manifest $professionalManifest)
                 @(Get-ManifestEntries -Manifest $appManifest)
             )
+            Write-AutomationLog -Message "Resolved UUP manifests for $($Target.Id): $($entries.Count) unique payload entries."
             Materialize-UupFiles -Entries $entries -PayloadCacheDirectory (Join-Path $Settings.Paths.Cache 'payloads') -DestinationDirectory $DestinationDirectory
             return
         } catch {
@@ -636,13 +644,16 @@ function Invoke-UupConversion {
         [Parameter(Mandatory)][string]$TranscriptBasePath
     )
 
+    Write-AutomationLog -Message "Preparing UUP converter workspace: $ConverterWorkDirectory"
     Copy-Item -LiteralPath $Tools.Directory -Destination $ConverterWorkDirectory -Recurse -Force -ErrorAction Stop
+    Write-AutomationLog -Message "UUP converter tools copied to staging."
     $commandPath = Join-Path $ConverterWorkDirectory $Tools.CommandRelativePath
     $converterRoot = Split-Path -Parent $commandPath
     $iniPath = Join-Path $converterRoot 'ConvertConfig.ini'
     if (-not (Test-Path -LiteralPath $iniPath -PathType Leaf)) {
         throw "Converter configuration was not found: $iniPath"
     }
+    Write-AutomationLog -Message "Configuring UUP converter INI: $iniPath"
     $ini = Get-Content -LiteralPath $iniPath -Raw -ErrorAction Stop
     foreach ($option in @{
         AutoStart = '1'; AddUpdates = '1'; Cleanup = '0'; ResetBase = '0'; SkipWinRE = '0'
@@ -651,6 +662,7 @@ function Invoke-UupConversion {
         $ini = Set-IniValue -Content $ini -Name $option.Key -Value $option.Value
     }
     $ini | Out-File -LiteralPath $iniPath -Encoding ascii -Force
+    Write-AutomationLog -Message "UUP converter INI configured."
 
     $before = @(Get-ChildItem -LiteralPath $ConverterWorkDirectory -Filter '*.iso' -File -Recurse -ErrorAction SilentlyContinue |
         ForEach-Object { $_.FullName })
