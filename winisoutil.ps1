@@ -1,4 +1,4 @@
-﻿# WinIsoUtil - A PowerShell script to customize Windows installation ISOs.
+# WinIsoUtil - A PowerShell script to customize Windows installation ISOs.
 # This script provides a user-friendly interface for modifying Windows ISO files.
 # It supports various customization options, including feature selection, component tweaks, and application exclusions.
 # The script is designed to be modular and extensible, allowing for future enhancements and additional features.
@@ -7,6 +7,22 @@
 # License: MIT License
 # Note: This script requires administrative privileges to run.
 # Usage of this script is at your own risk. Always back up important data before making system modifications.
+
+[CmdletBinding()]
+param(
+    [string]$IsoPath,
+    [string]$ConfigurationPath,
+    [string]$OutputIsoPath,
+    [ValidateSet('tr', 'en')]
+    [string]$Language,
+    [ValidateRange(1, 999)]
+    [int]$EditionIndex,
+    [string]$UpdatesPath,
+    [string]$DriversPath,
+    [string]$WorkingDirectory = (Join-Path $env:TEMP 'WinISOUtil'),
+    [switch]$Unattended,
+    [switch]$SkipWimOptimization
+)
 
 # This trap block runs if a terminating error occurs anywhere in the script.
 # It ensures a safe cleanup to prevent leaving a mounted image behind.
@@ -33,6 +49,7 @@ $White = "White"
 # A global configuration object to store user selections throughout the session.
 $global:ScriptConfig = @{
     RemovedApps            = @()
+    RemovedAppSelectors    = @()
     RegistryTweaks         = @()
     EnabledFeatures        = @()
     ComponentServiceTweaks = @()
@@ -41,12 +58,109 @@ $global:ScriptConfig = @{
 # A script-level variable to determine the execution mode ('MANUAL' or 'AUTOMATIC').
 $script:runMode = 'MANUAL' # Default mode.
 
+$script:WorkspaceMarkerName = '.winisoutil-workspace.json'
+$script:WorkspaceMarkerType = 'WinISOUtilWorkspace'
+$script:SessionId = [guid]::NewGuid().ToString()
+$script:WorkingDirectory = [System.IO.Path]::GetFullPath($WorkingDirectory)
+$script:IsoContentPath = Join-Path $script:WorkingDirectory 'iso'
+$script:MountPath = Join-Path $script:WorkingDirectory 'mount'
+$script:WorkspaceMarkerPath = Join-Path $script:WorkingDirectory $script:WorkspaceMarkerName
+$script:InstallImagePath = $null
+
 # --- ALL FUNCTION DEFINITIONS ---
 
 # Helper function to write text to the console in a specified color.
 function Write-ColorText {
     param([string]$Text, [string]$Color = "White")
     Write-Host $Text -ForegroundColor $Color
+}
+
+# Ensures recursive cleanup can only target a child of the configured workspace.
+function Assert-SafeWorkspacePath {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $workspaceRoot = [System.IO.Path]::GetFullPath($script:WorkingDirectory).TrimEnd('\') + '\'
+    $candidate = [System.IO.Path]::GetFullPath($Path)
+    if (-not $candidate.StartsWith($workspaceRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to operate outside the WinISOUtil workspace: $candidate"
+    }
+}
+
+function Test-OwnedWorkspace {
+    if (-not (Test-Path -LiteralPath $script:WorkspaceMarkerPath -PathType Leaf)) {
+        return $false
+    }
+
+    try {
+        $marker = Get-Content -LiteralPath $script:WorkspaceMarkerPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        return $marker.Type -eq $script:WorkspaceMarkerType -and
+            [System.IO.Path]::GetFullPath([string]$marker.Root) -eq $script:WorkingDirectory
+    } catch {
+        return $false
+    }
+}
+
+function New-WorkspaceMarker {
+    if (-not (Test-Path -LiteralPath $script:WorkingDirectory)) {
+        New-Item -ItemType Directory -Path $script:WorkingDirectory -Force -ErrorAction Stop | Out-Null
+    }
+
+    @{
+        Type      = $script:WorkspaceMarkerType
+        Root      = $script:WorkingDirectory
+        SessionId = $script:SessionId
+        CreatedAt = (Get-Date).ToString('o')
+    } | ConvertTo-Json | Out-File -LiteralPath $script:WorkspaceMarkerPath -Encoding utf8 -Force
+}
+
+function Remove-OwnedWorkspaceItem {
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-OwnedWorkspace)) {
+        throw "Refusing to clean an unowned workspace: $($script:WorkingDirectory)"
+    }
+
+    Assert-SafeWorkspacePath -Path $Path
+    if (Test-Path -LiteralPath $Path) {
+        Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+    }
+}
+
+function Invoke-Dism {
+    param(
+        [Parameter(Mandatory)][string[]]$Arguments,
+        [switch]$PassThru,
+        [switch]$Quiet
+    )
+
+    $dismArguments = @('/English') + $Arguments
+    $output = & $global:dismPath @dismArguments 2>&1
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        throw "DISM failed with exit code $exitCode.`n$($output -join "`n")"
+    }
+
+    if (-not $Quiet -and -not $PassThru) {
+        $output | ForEach-Object { Write-Host $_ }
+    }
+    if ($PassThru) {
+        return $output
+    }
+}
+
+function Invoke-Reg {
+    param([Parameter(Mandatory)][string[]]$Arguments)
+
+    $output = & reg.exe @Arguments 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "REG.EXE failed: reg.exe $($Arguments -join ' ')`n$($output -join "`n")"
+    }
+    return $output
+}
+
+function Get-OfflineCurrentControlSet {
+    $current = Get-ItemPropertyValue -Path 'Registry::HKLM\TEMPSYSTEM\Select' -Name 'Current' -ErrorAction Stop
+    return ('ControlSet{0:d3}' -f [int]$current)
 }
 
 # Clears the screen and displays the script's main banner.
@@ -85,9 +199,15 @@ function Invoke-LongRunningOperation {
         Start-Sleep -Milliseconds 100
     }
     Write-Host "`r$(' ' * ($Message.Length + 5))`r" # Clear the spinner line.
-    if ($job.State -eq 'Failed') {
-        $errorMsg = $job.ChildJobs[0].Error
-        throw ($langStrings.longOpFailed -f $errorMsg)
+    try {
+        $jobOutput = Receive-Job -Job $job -ErrorAction Stop
+        if ($job.State -eq 'Failed') {
+            $errorMsg = $job.ChildJobs[0].Error | Out-String
+            throw ($langStrings.longOpFailed -f $errorMsg.Trim())
+        }
+        return $jobOutput
+    } finally {
+        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -111,7 +231,11 @@ function Get-UserChoice {
         if ($selection -ieq 'g') { return 'go_back' }
         if ($selection -ieq "tumu" -or $selection -ieq "all") { return @(1..$Options.Length) }
         try {
-            return $selection.Split(',').Trim() | ForEach-Object { [int]$_ }
+            $indices = @($selection.Split(',').Trim() | ForEach-Object { [int]$_ })
+            if ($indices.Count -eq 0 -or ($indices | Where-Object { $_ -lt 1 -or $_ -gt $Options.Length })) {
+                throw "Selection is outside the available option range."
+            }
+            return $indices
         } catch {
             Write-ColorText $langStrings.invalidChoice $Red
             return @()
@@ -131,7 +255,6 @@ function Get-UserChoice {
 # Finds the required oscdimg.exe tool from the Windows ADK.
 function Find-Oscdimg {
     $adkPaths = @(
-        "C:\Program Files (x88)\Windows Kits\11\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg",
         "C:\Program Files (x86)\Windows Kits\11\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg",
         "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg"
     )
@@ -145,27 +268,133 @@ function Find-Oscdimg {
     return $null
 }
 
+function ConvertTo-StringArray {
+    param(
+        $Value,
+        [Parameter(Mandatory)][string]$PropertyName
+    )
+
+    $result = [System.Collections.Generic.List[string]]::new()
+    foreach ($item in @($Value)) {
+        if ($null -eq $item) { continue }
+        if ($item -isnot [string] -or [string]::IsNullOrWhiteSpace($item)) {
+            throw "Configuration property '$PropertyName' must contain non-empty strings only."
+        }
+        $result.Add($item.Trim())
+    }
+    return [string[]]$result.ToArray()
+}
+
+function ConvertTo-ValidatedConfiguration {
+    param([Parameter(Mandatory)]$Configuration)
+
+    $schemaVersion = 1
+    if ($Configuration.PSObject.Properties.Name -contains 'SchemaVersion') {
+        $schemaVersion = [int]$Configuration.SchemaVersion
+    }
+    if ($schemaVersion -notin @(1, 2)) {
+        throw "Unsupported configuration schema version: $schemaVersion"
+    }
+
+    . (Join-Path $PSScriptRoot "src/tweaks.ps1")
+    . (Join-Path $PSScriptRoot "src/components.ps1")
+    . (Join-Path $PSScriptRoot "src/features.ps1")
+    . (Join-Path $PSScriptRoot "src/app-exclusion-list.ps1")
+
+    $registryTweaks = ConvertTo-StringArray -Value $Configuration.RegistryTweaks -PropertyName 'RegistryTweaks'
+    $componentTweaks = ConvertTo-StringArray -Value $Configuration.ComponentServiceTweaks -PropertyName 'ComponentServiceTweaks'
+    $enabledFeatures = ConvertTo-StringArray -Value $Configuration.EnabledFeatures -PropertyName 'EnabledFeatures'
+    $removedApps = ConvertTo-StringArray -Value $Configuration.RemovedApps -PropertyName 'RemovedApps'
+    $removedAppSelectors = ConvertTo-StringArray -Value $Configuration.RemovedAppSelectors -PropertyName 'RemovedAppSelectors'
+    if ($schemaVersion -eq 2 -and $removedApps.Count -gt 0) {
+        throw "Schema version 2 configurations must use RemovedAppSelectors instead of RemovedApps."
+    }
+
+    $unknownRegistryTweaks = @($registryTweaks | Where-Object { $_ -notin $allTweaks.ID })
+    $unknownComponentTweaks = @($componentTweaks | Where-Object { $_ -notin $allComponentTweaks.ID })
+    $unknownFeatures = @($enabledFeatures | Where-Object { $_ -notin $allFeatures.FeatureName })
+    if ($unknownRegistryTweaks.Count -gt 0) {
+        throw "Unknown registry tweak IDs: $($unknownRegistryTweaks -join ', ')"
+    }
+    if ($unknownComponentTweaks.Count -gt 0) {
+        throw "Unknown component or service tweak IDs: $($unknownComponentTweaks -join ', ')"
+    }
+    if ($unknownFeatures.Count -gt 0) {
+        throw "Unknown Windows feature IDs: $($unknownFeatures -join ', ')"
+    }
+
+    foreach ($packageName in $removedApps) {
+        if ($packageName -cnotmatch '^[A-Za-z0-9._~\-]+$') {
+            throw "Invalid provisioned app package name: $packageName"
+        }
+        foreach ($pattern in $appExclusionList) {
+            if ($packageName -like $pattern) {
+                throw "The configuration attempts to remove a protected app package: $packageName"
+            }
+        }
+    }
+    foreach ($selector in $removedAppSelectors) {
+        if ($selector -cnotmatch '^[A-Za-z0-9._~\-]+$') {
+            throw "Invalid provisioned app selector: $selector"
+        }
+        foreach ($pattern in $appExclusionList) {
+            if ($selector -like $pattern) {
+                throw "The configuration attempts to remove a protected app selector: $selector"
+            }
+        }
+    }
+
+    return @{
+        SchemaVersion          = $schemaVersion
+        RemovedApps            = @($removedApps | Select-Object -Unique)
+        RemovedAppSelectors    = @($removedAppSelectors | Select-Object -Unique)
+        RegistryTweaks         = @($registryTweaks | Select-Object -Unique)
+        EnabledFeatures        = @($enabledFeatures | Select-Object -Unique)
+        ComponentServiceTweaks = @($componentTweaks | Select-Object -Unique)
+    }
+}
+
 # Asks the user if they want to import settings from a .json file to run in automatic mode.
 function Import-Configuration {
+    param([string]$Path)
+
     Show-Banner
-    Write-ColorText $langStrings.importTitle $Yellow
-    Write-ColorText $langStrings.importDesc $Cyan
-    $choice = Read-Host $langStrings.importPrompt
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        Write-ColorText $langStrings.importTitle $Yellow
+        Write-ColorText $langStrings.importDesc $Cyan
+        $choice = Read-Host $langStrings.importPrompt
+    } else {
+        $choice = 'Y'
+    }
+
     if ($choice -ieq 'E' -or $choice -ieq 'Y') {
-        Add-Type -AssemblyName System.Windows.Forms
-        $OpenFileDialog = New-Object System.Windows.Forms.OpenFileDialog
-        $OpenFileDialog.Title = $langStrings.importFileSelectTitle
-        $OpenFileDialog.Filter = "JSON files (*.json)|*.json"
-        $OpenFileDialog.InitialDirectory = [Environment]::GetFolderPath("Desktop")
-        if ($OpenFileDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-            $configPath = $OpenFileDialog.FileName
+        if ([string]::IsNullOrWhiteSpace($Path)) {
+            Add-Type -AssemblyName System.Windows.Forms
+            $OpenFileDialog = New-Object System.Windows.Forms.OpenFileDialog
+            $OpenFileDialog.Title = $langStrings.importFileSelectTitle
+            $OpenFileDialog.Filter = "JSON files (*.json)|*.json"
+            $OpenFileDialog.InitialDirectory = [Environment]::GetFolderPath("Desktop")
+            if ($OpenFileDialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
+                Write-ColorText $langStrings.importFileNotSelected $Yellow
+                if ($script:runMode -ne 'AUTOMATIC') { Suspend-Script }
+                return $false
+            }
+            $Path = $OpenFileDialog.FileName
+        }
+
+        if (Test-Path -LiteralPath $Path -PathType Leaf) {
             try {
-                Write-ColorText ($langStrings.importReadingFile -f $configPath) $Green
-                $configContent = Get-Content -Path $configPath -Raw | ConvertFrom-Json
-                if ($configContent.PSObject.Properties.Name -contains 'RemovedApps') { $global:ScriptConfig.RemovedApps = $configContent.RemovedApps }
-                if ($configContent.PSObject.Properties.Name -contains 'RegistryTweaks') { $global:ScriptConfig.RegistryTweaks = $configContent.RegistryTweaks }
-                if ($configContent.PSObject.Properties.Name -contains 'EnabledFeatures') { $global:ScriptConfig.EnabledFeatures = $configContent.EnabledFeatures }
-                if ($configContent.PSObject.Properties.Name -contains 'ComponentServiceTweaks') { $global:ScriptConfig.ComponentServiceTweaks = $configContent.ComponentServiceTweaks }
+                if ((Get-Item -LiteralPath $Path -ErrorAction Stop).Length -gt 1MB) {
+                    throw "Configuration files larger than 1 MB are not accepted."
+                }
+                Write-ColorText ($langStrings.importReadingFile -f $Path) $Green
+                $configContent = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+                $validatedConfiguration = ConvertTo-ValidatedConfiguration -Configuration $configContent
+                $global:ScriptConfig.RemovedApps = $validatedConfiguration.RemovedApps
+                $global:ScriptConfig.RemovedAppSelectors = $validatedConfiguration.RemovedAppSelectors
+                $global:ScriptConfig.RegistryTweaks = $validatedConfiguration.RegistryTweaks
+                $global:ScriptConfig.EnabledFeatures = $validatedConfiguration.EnabledFeatures
+                $global:ScriptConfig.ComponentServiceTweaks = $validatedConfiguration.ComponentServiceTweaks
                 Write-ColorText $langStrings.importSuccess $Green
                 Start-Sleep -Seconds 2
                 return $true # Return true to signal automatic mode.
@@ -175,7 +404,7 @@ function Import-Configuration {
                 return $false
             }
         } else {
-            Write-ColorText $langStrings.importFileNotSelected $Yellow
+            Write-ColorText ($langStrings.importReadError -f "File not found: $Path") $Red
             if ($script:runMode -ne 'AUTOMATIC') { Suspend-Script }
             return $false
         }
@@ -201,9 +430,10 @@ function Export-Configuration {
         $exportPath = $SaveFileDialog.FileName
         try {
             $exportObject = @{
+                SchemaVersion          = 2
                 Description            = $langStrings.exportConfigDesc
                 DateCreated            = (Get-Date).ToString("yyyy-MM-dd")
-                RemovedApps            = $global:ScriptConfig.RemovedApps
+                RemovedAppSelectors    = $global:ScriptConfig.RemovedAppSelectors
                 RegistryTweaks         = $global:ScriptConfig.RegistryTweaks
                 EnabledFeatures        = $global:ScriptConfig.EnabledFeatures
                 ComponentServiceTweaks = $global:ScriptConfig.ComponentServiceTweaks
@@ -223,15 +453,70 @@ function Export-Configuration {
 function Initialize-Environment {
     Write-ColorText $langStrings.initEnvPreparing $Green
     try {
-        if (Test-Path "C:\temp_iso") { Remove-Item "C:\temp_iso" -Recurse -Force }
-        if (Test-Path "C:\mount") { Remove-Item "C:\mount" -Recurse -Force }
-        New-Item -ItemType Directory -Path "C:\temp_iso" -Force | Out-Null
-        New-Item -ItemType Directory -Path "C:\mount" -Force | Out-Null
+        if (Test-Path -LiteralPath $script:WorkingDirectory) {
+            if (-not (Test-OwnedWorkspace)) {
+                $existingItems = @(Get-ChildItem -LiteralPath $script:WorkingDirectory -Force -ErrorAction Stop)
+                if ($existingItems.Count -gt 0) {
+                    throw "The configured workspace exists but is not owned by WinISOUtil: $($script:WorkingDirectory)"
+                }
+                New-WorkspaceMarker
+            }
+            if (Test-Path -LiteralPath (Join-Path $script:MountPath 'Windows')) {
+                throw "An existing mounted image was found in the WinISOUtil workspace. Resolve it before starting a new run: $($script:MountPath)"
+            }
+            Remove-OwnedWorkspaceItem -Path $script:IsoContentPath
+            Remove-OwnedWorkspaceItem -Path $script:MountPath
+        } else {
+            New-WorkspaceMarker
+        }
+        New-Item -ItemType Directory -Path $script:IsoContentPath -Force -ErrorAction Stop | Out-Null
+        New-Item -ItemType Directory -Path $script:MountPath -Force -ErrorAction Stop | Out-Null
         Write-ColorText $langStrings.initEnvSuccess $Green
     } catch {
         Write-ColorText ($langStrings.initEnvError -f $_) $Red
         throw $langStrings.initEnvFail
     }
+}
+
+function Convert-EsdToWim {
+    param([Parameter(Mandatory)][string]$EsdPath)
+
+    $wimPath = Join-Path $script:IsoContentPath 'sources\install.wim'
+    Write-ColorText $langStrings.copyIsoConvertingEsd $Yellow
+    $imageInfo = Invoke-Dism -Arguments @('/Get-WimInfo', "/WimFile:$EsdPath") -PassThru -Quiet
+    $indexes = @($imageInfo | ForEach-Object {
+        if ($_ -match '^\s*Index\s*:\s*(\d+)\s*$') { $Matches[1] }
+    })
+    if ($indexes.Count -eq 0) {
+        throw "No image indexes were found in install.esd."
+    }
+
+    foreach ($index in $indexes) {
+        Invoke-Dism -Arguments @(
+            '/Export-Image',
+            "/SourceImageFile:$EsdPath",
+            "/SourceIndex:$index",
+            "/DestinationImageFile:$wimPath",
+            '/Compress:max',
+            '/CheckIntegrity'
+        )
+    }
+    Remove-Item -LiteralPath $EsdPath -Force -ErrorAction Stop
+    return $wimPath
+}
+
+function Resolve-InstallImagePath {
+    $wimPath = Join-Path $script:IsoContentPath 'sources\install.wim'
+    $esdPath = Join-Path $script:IsoContentPath 'sources\install.esd'
+    if (Test-Path -LiteralPath $wimPath -PathType Leaf) {
+        Set-ItemProperty -LiteralPath $wimPath -Name IsReadOnly -Value $false -ErrorAction Stop
+        return $wimPath
+    }
+    if (Test-Path -LiteralPath $esdPath -PathType Leaf) {
+        Set-ItemProperty -LiteralPath $esdPath -Name IsReadOnly -Value $false -ErrorAction Stop
+        return Convert-EsdToWim -EsdPath $esdPath
+    }
+    throw "The selected ISO does not contain sources\install.wim or sources\install.esd."
 }
 
 # Mounts the source ISO and copies its contents to a temporary folder.
@@ -242,10 +527,13 @@ function Copy-IsoFiles {
     try {
         $mountResult = Mount-DiskImage -ImagePath $IsoPath -PassThru
         $driveLetter = ($mountResult | Get-Volume).DriveLetter
-        Copy-Item -Path "$($driveLetter):\*" -Destination "C:\temp_iso\" -Recurse -Force
+        if ([string]::IsNullOrWhiteSpace($driveLetter)) {
+            throw "The mounted ISO did not expose a drive letter."
+        }
+        Copy-Item -Path "$($driveLetter):\*" -Destination $script:IsoContentPath -Recurse -Force -ErrorAction Stop
         # The install.wim file must be writable for modifications.
         Write-ColorText $langStrings.copyIsoUnlockingWim $Yellow
-        Set-ItemProperty -Path "C:\temp_iso\sources\install.wim" -Name IsReadOnly -Value $false
+        $script:InstallImagePath = Resolve-InstallImagePath
         Write-ColorText $langStrings.copyIsoSuccess $Green
     } catch {
         Write-ColorText ($langStrings.copyIsoError -f $_) $Red
@@ -284,12 +572,12 @@ function Find-DismPath {
 
 # Allows the user to remove unwanted Windows editions from the install.wim file to save space.
 function Remove-WindowsEditions {
-    $wimFile = "C:\temp_iso\sources\install.wim"
+    $wimFile = $script:InstallImagePath
     do {
         Clear-Host
         Show-Banner
         Write-ColorText $langStrings.removeEditionsAnalyzing $Green
-        $wimInfo = & $global:dismPath /Get-WimInfo /WimFile:$wimFile
+        $wimInfo = Invoke-Dism -Arguments @('/Get-WimInfo', "/WimFile:$wimFile") -PassThru -Quiet
         $editions = $wimInfo | Select-String "Index|Name"
         Write-ColorText $langStrings.removeEditionsCurrent $Yellow
         $editions | ForEach-Object { Write-Host $_.Line }
@@ -305,7 +593,7 @@ function Remove-WindowsEditions {
         if ($choice -ieq 'g') { break }
         try {
             # Sort descending to avoid index shifting issues during deletion.
-            $indicesToDelete = $choice.Split(',') | ForEach-Object { [int]$_.Trim() } | Sort-Object -Descending
+            $indicesToDelete = @($choice.Split(',') | ForEach-Object { [int]$_.Trim() } | Sort-Object -Unique -Descending)
             $validInput = $true
             foreach($index in $indicesToDelete) {
                 if ($index -lt 1 -or $index -gt $indexCount) {
@@ -318,10 +606,15 @@ function Remove-WindowsEditions {
                 Start-Sleep -Seconds 3
                 continue
             }
+            if ($indicesToDelete.Count -ge $indexCount) {
+                Write-ColorText $langStrings.removeEditionsKeepOne $Red
+                Start-Sleep -Seconds 3
+                continue
+            }
             foreach ($index in $indicesToDelete) {
                 Write-ColorText ($langStrings.removeEditionsRemoving -f $index) $Yellow
                 try {
-                    & $global:dismPath /Delete-Image /ImageFile:$wimFile /Index:$index /CheckIntegrity
+                    Invoke-Dism -Arguments @('/Delete-Image', "/ImageFile:$wimFile", "/Index:$index", '/CheckIntegrity')
                     Write-ColorText ($langStrings.removeEditionsSuccess -f $index) $Green
                     Start-Sleep -Seconds 1
                 } catch {
@@ -338,73 +631,82 @@ function Remove-WindowsEditions {
     } while ($true)
 }
 
-# Mounts the selected Windows image edition to the C:\mount directory for modification.
+# Mounts the selected Windows image edition for modification.
 function Mount-WindowsImage {
+    param([int]$Index)
+
     Clear-Host
     Show-Banner
-    $wimFile = "C:\temp_iso\sources\install.wim"
+    $wimFile = $script:InstallImagePath
     Write-ColorText $langStrings.mountListingEditions $Green
-    $wimInfo = & $global:dismPath /Get-WimInfo /WimFile:$wimFile
+    $wimInfo = Invoke-Dism -Arguments @('/Get-WimInfo', "/WimFile:$wimFile") -PassThru -Quiet
     $editions = $wimInfo | Select-String "Index|Name"
     Write-ColorText $langStrings.removeEditionsCurrent $Yellow
     $editions | ForEach-Object { Write-Host $_.Line }
     $indexCount = ($editions | Where-Object { $_.Line -match "Name" }).Count
-    # If only one edition exists, mount it automatically.
-    if ($indexCount -eq 1) {
-        Write-ColorText "`n$($langStrings.mountMountingImage)" $Yellow
-        try {
-            & $global:dismPath /Mount-Image /ImageFile:$wimFile /Index:1 /MountDir:"C:\mount"
-            if ($LASTEXITCODE -ne 0) { throw $langStrings.mountFail }
-            Write-ColorText $langStrings.mountSuccess $Green
-            Start-Sleep -Seconds 3
-            return $true
-        } catch {
-            Write-ColorText ($langStrings.mountError -f $_) $Red
-            throw $langStrings.mountFail
-        }
-    } else {
-        # If multiple editions exist, prompt the user for a selection.
+    if ($indexCount -eq 0) {
+        throw "No Windows image indexes were found in $wimFile."
+    }
+
+    if ($Index -eq 0 -and $indexCount -eq 1) {
+        $Index = 1
+    } elseif ($Index -eq 0 -and $Unattended) {
+        throw "The ISO contains multiple Windows editions. Specify -EditionIndex for unattended mode."
+    } elseif ($Index -eq 0) {
         $choice = Read-Host $langStrings.mountPromptIndex
-        if ($choice -match '^\d+$' -and [int]$choice -ge 1 -and [int]$choice -le $indexCount) {
-            Write-ColorText $langStrings.mountMountingImage $Yellow
-            try {
-                & $global:dismPath /Mount-Image /ImageFile:$wimFile /Index:$choice /MountDir:"C:\mount"
-                if ($LASTEXITCODE -ne 0) { throw $langStrings.mountFail }
-                Write-ColorText $langStrings.mountSuccess $Green
-                Start-Sleep -Seconds 3
-                return $true
-            } catch {
-                Write-ColorText ($langStrings.mountError -f $_) $Red
-                throw $langStrings.mountFail
-            }
-        } else {
+        if ($choice -notmatch '^\d+$') {
             Write-ColorText $langStrings.mountInvalidIndex $Red
             return $false
         }
+        $Index = [int]$choice
+    }
+
+    if ($Index -lt 1 -or $Index -gt $indexCount) {
+        Write-ColorText $langStrings.mountInvalidIndex $Red
+        return $false
+    }
+
+    Write-ColorText "`n$($langStrings.mountMountingImage)" $Yellow
+    try {
+        Invoke-Dism -Arguments @('/Mount-Image', "/ImageFile:$wimFile", "/Index:$Index", "/MountDir:$($script:MountPath)")
+        Write-ColorText $langStrings.mountSuccess $Green
+        Start-Sleep -Seconds 3
+        return $true
+    } catch {
+        Write-ColorText ($langStrings.mountError -f $_) $Red
+        throw $langStrings.mountFail
     }
 }
 
 # Integrates Windows Update packages (.msu) from a user-selected folder into the image.
 function Add-WindowsUpdates {
+    param([string]$Path)
+
     Clear-Host
     Show-Banner
-    Add-Type -AssemblyName System.Windows.Forms
-    $FolderBrowserDialog = New-Object System.Windows.Forms.FolderBrowserDialog
-    $FolderBrowserDialog.Description = $langStrings.updatesPromptPath
-    $updatesPath = ""
-    if ($FolderBrowserDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        $updatesPath = $FolderBrowserDialog.SelectedPath
-    } else {
-        return # Return to the menu if the user cancels the dialog.
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        Add-Type -AssemblyName System.Windows.Forms
+        $FolderBrowserDialog = New-Object System.Windows.Forms.FolderBrowserDialog
+        $FolderBrowserDialog.Description = $langStrings.updatesPromptPath
+        if ($FolderBrowserDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+            $Path = $FolderBrowserDialog.SelectedPath
+        } else {
+            return # Return to the menu if the user cancels the dialog.
+        }
     }
-    if (Test-Path $updatesPath) {
-        $updateFiles = Get-ChildItem -Path $updatesPath -Filter "*.msu" -ErrorAction Silentlycontinue
+    if (Test-Path -LiteralPath $Path -PathType Container) {
+        $updateFiles = Get-ChildItem -LiteralPath $Path -Filter "*.msu" -File -ErrorAction SilentlyContinue
         if ($updateFiles) {
             Write-ColorText $langStrings.updatesAdding $Green
             foreach ($file in $updateFiles) {
                 Write-ColorText ($langStrings.updatesAddingFile -f $file.Name) $Yellow
                 try {
-                    & $global:dismPath /Image:"C:\mount" /Add-Package /PackagePath:"$($file.FullName)" /LogPath=C:\mount\dism.log
+                    Invoke-Dism -Arguments @(
+                        "/Image:$($script:MountPath)",
+                        '/Add-Package',
+                        "/PackagePath:$($file.FullName)",
+                        "/LogPath:$(Join-Path $script:MountPath 'dism.log')"
+                    )
                     Write-ColorText ($langStrings.updatesAddedFile -f $file.Name) $Green
                 } catch {
                     Write-ColorText ($langStrings.updatesErrorFile -f $file.Name, $_) $Red
@@ -421,22 +723,25 @@ function Add-WindowsUpdates {
 
 # Integrates drivers (.inf) from a user-selected folder and its subdirectories into the image.
 function Add-Drivers {
+    param([string]$Path)
+
     Clear-Host
     Show-Banner
-    Add-Type -AssemblyName System.Windows.Forms
-    $FolderBrowserDialog = New-Object System.Windows.Forms.FolderBrowserDialog
-    $FolderBrowserDialog.Description = $langStrings.driversPromptPath
-    $driversPath = ""
-    if ($FolderBrowserDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        $driversPath = $FolderBrowserDialog.SelectedPath
-    } else {
-        return # Return to the menu if the user cancels the dialog.
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        Add-Type -AssemblyName System.Windows.Forms
+        $FolderBrowserDialog = New-Object System.Windows.Forms.FolderBrowserDialog
+        $FolderBrowserDialog.Description = $langStrings.driversPromptPath
+        if ($FolderBrowserDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+            $Path = $FolderBrowserDialog.SelectedPath
+        } else {
+            return # Return to the menu if the user cancels the dialog.
+        }
     }
-    if (Test-Path $driversPath) {
+    if (Test-Path -LiteralPath $Path -PathType Container) {
         Write-ColorText $langStrings.driversAdding $Yellow
         try {
             # The /Recurse switch tells DISM to look for drivers in all subfolders.
-            & $global:dismPath /Image:C:\mount /Add-Driver /Driver:"$driversPath" /Recurse
+            Invoke-Dism -Arguments @("/Image:$($script:MountPath)", '/Add-Driver', "/Driver:$Path", '/Recurse')
             Write-ColorText $langStrings.driversSuccess $Green
         } catch {
             Write-ColorText ($langStrings.driversError -f $_) $Red
@@ -456,7 +761,7 @@ function Set-ComponentsAndServices {
         Suspend-Script
         return
     }
-    
+
     $tweaksToApply = [System.Collections.Generic.List[object]]::new()
     $runInManualMode = $script:runMode -eq 'MANUAL'
 
@@ -464,7 +769,7 @@ function Set-ComponentsAndServices {
         if ($global:ScriptConfig.ComponentServiceTweaks.Count -gt 0) {
             Write-ColorText $langStrings.compSvcApplyingFromConfig $Cyan
             $selectedTweakIDs = $global:ScriptConfig.ComponentServiceTweaks
-            $tweaksToApply.AddRange(($allComponentTweaks | Where-Object { $selectedTweakIDs -contains $_.ID }))
+            $tweaksToApply.AddRange([object[]]@($allComponentTweaks | Where-Object { $selectedTweakIDs -contains $_.ID }))
         }
     }
     else { # Manual Mode
@@ -492,13 +797,16 @@ function Set-ComponentsAndServices {
 
     $servicesToDisable = $tweaksToApply | Where-Object { $_.Type -eq 'Service' }
     if ($servicesToDisable) {
+        $systemHiveLoaded = $false
         try {
             Write-ColorText $langStrings.compSvcConfiguringServices $Yellow
-            REG LOAD HKLM\TEMPSYSTEM C:\mount\Windows\System32\config\SYSTEM
+            Invoke-Reg -Arguments @('LOAD', 'HKLM\TEMPSYSTEM', (Join-Path $script:MountPath 'Windows\System32\config\SYSTEM')) | Out-Null
+            $systemHiveLoaded = $true
+            $offlineControlSet = Get-OfflineCurrentControlSet
             foreach ($tweak in $servicesToDisable) {
                 foreach ($serviceName in $tweak.ServiceNames) {
                     try {
-                        $servicePath = "Registry::HKLM\TEMPSYSTEM\ControlSet001\Services\$serviceName"
+                        $servicePath = "Registry::HKLM\TEMPSYSTEM\$offlineControlSet\Services\$serviceName"
                         if (Test-Path $servicePath) {
                             Set-ItemProperty -Path $servicePath -Name "Start" -Value 4 -Type DWord -Force
                             Write-ColorText ($langStrings.compSvcServiceDisabled -f $serviceName) $Green
@@ -507,12 +815,15 @@ function Set-ComponentsAndServices {
                         }
                     } catch {
                         Write-ColorText ($langStrings.compSvcServiceError -f $serviceName, $_) $Red
+                        if (-not $runInManualMode) { throw }
                     }
                 }
             }
         } finally {
             [gc]::Collect(); [gc]::WaitForPendingFinalizers()
-            REG UNLOAD HKLM\TEMPSYSTEM
+            if ($systemHiveLoaded) {
+                Invoke-Reg -Arguments @('UNLOAD', 'HKLM\TEMPSYSTEM') | Out-Null
+            }
         }
     }
 
@@ -524,18 +835,14 @@ function Set-ComponentsAndServices {
             $componentName = ($global:langStrings[$langKey].Split('(')[0]).Trim()
             Write-ColorText ($langStrings.compSvcProcessing -f $componentName) $Yellow
             try {
-                $featureInfo = & $global:dismPath /Image:C:\mount /Get-FeatureInfo /FeatureName:$($tweak.FeatureName)
+                $featureInfo = Invoke-Dism -Arguments @("/Image:$($script:MountPath)", '/Get-FeatureInfo', "/FeatureName:$($tweak.FeatureName)") -PassThru -Quiet
                 $featureStateLine = $featureInfo | Select-String "State"
                 if ($featureStateLine) {
                     $featureState = $featureStateLine.Line.Split(':')[1].Trim()
                     if ($featureState -eq 'Enabled') {
                         Write-ColorText $langStrings.compSvcStateEnabled $Yellow
-                        & $global:dismPath /Image:C:\mount /Disable-Feature /FeatureName:$($tweak.FeatureName) /Remove /NoRestart | Out-Null
-                        if ($LASTEXITCODE -eq 0) {
-                            Write-ColorText $langStrings.compSvcRemoveSuccess $Green
-                        } else {
-                            Write-ColorText ($langStrings.compSvcRemoveError -f $LASTEXITCODE) $Red
-                        }
+                        Invoke-Dism -Arguments @("/Image:$($script:MountPath)", '/Disable-Feature', "/FeatureName:$($tweak.FeatureName)", '/Remove', '/NoRestart') -Quiet
+                        Write-ColorText $langStrings.compSvcRemoveSuccess $Green
                     } else {
                         Write-ColorText ($langStrings.compSvcStateNotEnabled -f $featureState) $Cyan
                     }
@@ -543,7 +850,12 @@ function Set-ComponentsAndServices {
                     Write-ColorText $langStrings.compSvcStateError $Cyan
                 }
             } catch {
-                Write-ColorText ($langStrings.compSvcCriticalError -f $_) $Red
+                if ($_.Exception.Message -match '0x800f080c') {
+                    Write-ColorText ($langStrings.compSvcFeatureAbsent -f $tweak.FeatureName) $Cyan
+                } else {
+                    Write-ColorText ($langStrings.compSvcCriticalError -f $_) $Red
+                    if (-not $runInManualMode) { throw }
+                }
             }
         }
     }
@@ -553,6 +865,7 @@ function Set-ComponentsAndServices {
 
 # Applies various registry tweaks from an external definition file.
 function Set-Registry {
+    $registryFailure = $null
     try {
         . (Join-Path $PSScriptRoot "src/tweaks.ps1")
     } catch {
@@ -561,14 +874,14 @@ function Set-Registry {
         return
     }
 
-    $finalSetupScript = "[System.Threading.Thread]::Sleep(5000); try { Remove-Item -Path 'C:\Windows.old' -Recurse -Force; Stop-Process -Name explorer -Force } catch {}"
+    $finalSetupScript = "[System.Threading.Thread]::Sleep(5000); try { Stop-Process -Name explorer -Force } catch {}"
     $tweaksToApply = [System.Collections.Generic.List[object]]::new()
-    
+
     if ($script:runMode -eq 'AUTOMATIC') {
         Write-ColorText $langStrings.regApplyingFromConfig $Cyan
         if ($global:ScriptConfig.RegistryTweaks.Count -gt 0) {
             $selectedTweakIDs = $global:ScriptConfig.RegistryTweaks
-            $tweaksToApply.AddRange(($allTweaks | Where-Object { $selectedTweakIDs -contains $_.ID }))
+            $tweaksToApply.AddRange([object[]]@($allTweaks | Where-Object { $selectedTweakIDs -contains $_.ID }))
         }
     }
     else { # Interactive manual mode with a selection loop.
@@ -579,9 +892,9 @@ function Set-Registry {
             Write-ColorText ("=" * $langStrings.regMenuTitle.Length) $Yellow
             if ($tweaksToApply.Count -gt 0) {
                 Write-ColorText "`n$($langStrings.regCurrentSelections)" $Cyan
-                $tweaksToApply | ForEach-Object { 
+                $tweaksToApply | ForEach-Object {
                     $langKey = "tweak_$($_.ID)_desc"
-                    Write-ColorText "- $($global:langStrings[$langKey])" $Green 
+                    Write-ColorText "- $($global:langStrings[$langKey])" $Green
                 }
             }
             $menuOptions = $allTweaks | ForEach-Object { $global:langStrings["tweak_$($_.ID)_desc"] }
@@ -644,7 +957,7 @@ function Set-Registry {
         $langKey = "tweak_$($firstUpdateOption.ID)_desc"
         Write-ColorText ($langStrings.regWarnMultiUpdate -f $global:langStrings[$langKey]) $Yellow
         Start-Sleep -Seconds 3
-        
+
         $otherTweaks = $tweaksToApply | Where-Object { $_.ID -notlike "WU_*" }
         $tweaksToApply.Clear()
         $tweaksToApply.AddRange($otherTweaks)
@@ -660,9 +973,17 @@ function Set-Registry {
         return
     }
 
+    $softwareHiveLoaded = $false
+    $userHiveLoaded = $false
+    $systemHiveLoaded = $false
     try {
-        REG LOAD HKLM\TEMP C:\mount\Windows\System32\config\SOFTWARE
-        REG LOAD HKU\TEMP C:\mount\Users\Default\NTUSER.DAT
+        Invoke-Reg -Arguments @('LOAD', 'HKLM\TEMP', (Join-Path $script:MountPath 'Windows\System32\config\SOFTWARE')) | Out-Null
+        $softwareHiveLoaded = $true
+        Invoke-Reg -Arguments @('LOAD', 'HKU\TEMP', (Join-Path $script:MountPath 'Users\Default\NTUSER.DAT')) | Out-Null
+        $userHiveLoaded = $true
+        Invoke-Reg -Arguments @('LOAD', 'HKLM\TEMPSYSTEM', (Join-Path $script:MountPath 'Windows\System32\config\SYSTEM')) | Out-Null
+        $systemHiveLoaded = $true
+        $script:OfflineControlSet = Get-OfflineCurrentControlSet
         $setupScriptContent = [System.Text.StringBuilder]::new()
         foreach ($tweak in $tweaksToApply) {
             $langKey = "tweak_$($tweak.ID)_desc"
@@ -684,7 +1005,13 @@ function Set-Registry {
                         break
                     }
                     "InlineScript" {
-                        . $tweak.Code
+                        $previousErrorActionPreference = $ErrorActionPreference
+                        try {
+                            $ErrorActionPreference = 'Stop'
+                            . $tweak.Code
+                        } finally {
+                            $ErrorActionPreference = $previousErrorActionPreference
+                        }
                         Write-ColorText $langStrings.regSuccess $Green
                         break
                     }
@@ -695,20 +1022,25 @@ function Set-Registry {
                     }
                 }
             } catch {
-                Write-ColorText ($langStrings.regFail -f $description, $_.Exception.Message) $Red
+                $errorDetails = $_.Exception.Message
+                if (-not [string]::IsNullOrWhiteSpace($_.InvocationInfo.PositionMessage)) {
+                    $errorDetails += "`n$($_.InvocationInfo.PositionMessage)"
+                }
+                Write-ColorText ($langStrings.regFail -f $description, $errorDetails) $Red
+                if ($script:runMode -eq 'AUTOMATIC') { throw }
             }
         }
         if ($setupScriptContent.Length -gt 0) {
             $setupScriptContent.AppendLine($finalSetupScript) | Out-Null
-            $scriptsPath = "C:\mount\Windows\Setup\Scripts"
+            $scriptsPath = Join-Path $script:MountPath 'Windows\Setup\Scripts'
             if (-not (Test-Path $scriptsPath)) {
                 New-Item -ItemType Directory -Path $scriptsPath -Force | Out-Null
             }
             $postSetupScriptPath = Join-Path $scriptsPath "post-setup.ps1"
             $setupScriptContent.ToString() | Out-File -FilePath $postSetupScriptPath -Encoding utf8
             Write-ColorText $langStrings.regPostSetupScriptCreated $Green
-            
-            $desktopPath = "C:\mount\Users\Default\Desktop"
+
+            $desktopPath = Join-Path $script:MountPath 'Users\Default\Desktop'
             if (-not (Test-Path $desktopPath)) {
                 New-Item -ItemType Directory -Path $desktopPath -Force | Out-Null
             }
@@ -720,56 +1052,104 @@ function Set-Registry {
         }
     } catch {
         Write-ColorText ($langStrings.regErrorGeneral -f $_) $Red
+        $registryFailure = $_
     } finally {
         Write-ColorText $langStrings.regSaving $Yellow
         [gc]::Collect(); [gc]::WaitForPendingFinalizers()
-        REG UNLOAD HKU\TEMP
-        REG UNLOAD HKLM\TEMP
+        if ($systemHiveLoaded) {
+            try { Invoke-Reg -Arguments @('UNLOAD', 'HKLM\TEMPSYSTEM') | Out-Null } catch { Write-ColorText $_ $Red }
+        }
+        if ($userHiveLoaded) {
+            try { Invoke-Reg -Arguments @('UNLOAD', 'HKU\TEMP') | Out-Null } catch { Write-ColorText $_ $Red }
+        }
+        if ($softwareHiveLoaded) {
+            try { Invoke-Reg -Arguments @('UNLOAD', 'HKLM\TEMP') | Out-Null } catch { Write-ColorText $_ $Red }
+        }
         Write-ColorText $langStrings.regComplete $Green
         if ($script:runMode -ne 'AUTOMATIC') { Suspend-Script $langStrings.regReturnToMenu }
     }
+    if ($null -ne $registryFailure -and $script:runMode -eq 'AUTOMATIC') {
+        throw $registryFailure
+    }
+}
+
+# Gets provisioned AppX package identities from the mounted image.
+function Get-ProvisionedAppPackages {
+    param([Parameter(Mandatory)][string]$MountPath)
+
+    $dismOutput = Invoke-Dism -Arguments @("/Image:$MountPath", '/Get-ProvisionedAppxPackages') -PassThru -Quiet
+    $packages = [System.Collections.Generic.List[object]]::new()
+    $packageBlocks = ($dismOutput -join "`n") -split '(?:\r?\n){2,}'
+    foreach ($block in $packageBlocks) {
+        $displayNameMatch = [regex]::Match($block, "DisplayName\s*:\s*(.+)")
+        $packageNameMatch = [regex]::Match($block, "PackageName\s*:\s*(.+)")
+        if ($displayNameMatch.Success -and $packageNameMatch.Success) {
+            $packages.Add([PSCustomObject]@{
+                DisplayName = $displayNameMatch.Groups[1].Value.Trim()
+                PackageName = $packageNameMatch.Groups[1].Value.Trim()
+            })
+        }
+    }
+    return @($packages | Sort-Object DisplayName)
 }
 
 # Gets a list of provisioned AppX packages and allows the user to remove them.
 function Remove-WindowsApps {
-    $mountPath = "C:\mount"
+    $mountPath = $script:MountPath
     $packagesToRemove = [System.Collections.Generic.List[string]]::new()
-    if ($script:runMode -eq 'AUTOMATIC' -and $global:ScriptConfig.RemovedApps.Count -gt 0) {
+    $selectorsToRemove = [System.Collections.Generic.List[string]]::new()
+    try {
+        . (Join-Path $PSScriptRoot "src/app-exclusion-list.ps1")
+    } catch {
+        Write-ColorText $langStrings.appExclusionDefNotFound $Red
+        if ($script:runMode -ne 'AUTOMATIC') { Suspend-Script }
+        return
+    }
+
+    if ($script:runMode -eq 'AUTOMATIC' -and $global:ScriptConfig.RemovedAppSelectors.Count -gt 0) {
         Write-ColorText $langStrings.appRemoveFromConfig $Cyan
-        $packagesToRemove.AddRange([string[]]$global:ScriptConfig.RemovedApps)
-    } else {
-        try {
-            . (Join-Path $PSScriptRoot "src/app-exclusion-list.ps1")
-        } catch {
-            Write-ColorText $langStrings.appExclusionDefNotFound $Red
-            Suspend-Script
-            return
+        $allAppPackages = @(Get-ProvisionedAppPackages -MountPath $mountPath)
+        foreach ($selector in [string[]]$global:ScriptConfig.RemovedAppSelectors) {
+            $matches = @($allAppPackages | Where-Object { $_.DisplayName -ieq $selector })
+            if ($matches.Count -ne 1) {
+                throw "Provisioned app selector '$selector' resolved to $($matches.Count) packages. Expected exactly one."
+            }
+            foreach ($pattern in $appExclusionList) {
+                if ($matches[0].PackageName -like $pattern) {
+                    throw "Refusing to remove protected provisioned app selector: $selector"
+                }
+            }
+            $selectorsToRemove.Add($selector)
+            $packagesToRemove.Add($matches[0].PackageName)
         }
+    } elseif ($script:runMode -eq 'AUTOMATIC' -and $global:ScriptConfig.RemovedApps.Count -gt 0) {
+        Write-ColorText $langStrings.appRemoveFromConfig $Cyan
+        foreach ($packageName in [string[]]$global:ScriptConfig.RemovedApps) {
+            $isExcluded = $false
+            foreach ($pattern in $appExclusionList) {
+                if ($packageName -like $pattern) {
+                    $isExcluded = $true
+                    break
+                }
+            }
+            if (-not $isExcluded) {
+                $packagesToRemove.Add($packageName)
+            }
+        }
+    } else {
         Write-ColorText $langStrings.appRemoveGettingList $Yellow
-        $dismOutput = & $global:dismPath /Image:$mountPath /Get-ProvisionedAppxPackages
-        if ($LASTEXITCODE -ne 0) {
-            Write-ColorText ($langStrings.appRemoveGetListError -f $LASTEXITCODE) $Red
+        try {
+            $allAppPackages = @(Get-ProvisionedAppPackages -MountPath $mountPath)
+        } catch {
+            Write-ColorText ($langStrings.appRemoveGetListError -f $_) $Red
             if ($script:runMode -ne 'AUTOMATIC') { Suspend-Script }
             return
         }
-        $allAppPackages = [System.Collections.Generic.List[object]]::new()
-        $packageBlocks = ($dismOutput -join "`n") -split '(?:\r?\n){2,}'
-        foreach ($block in $packageBlocks) {
-            $displayNameMatch = [regex]::Match($block, "DisplayName\s*:\s*(.+)")
-            $packageNameMatch = [regex]::Match($block, "PackageName\s*:\s*(.+)")
-            if ($displayNameMatch.Success -and $packageNameMatch.Success) {
-                $allAppPackages.Add([PSCustomObject]@{
-                    DisplayName = $displayNameMatch.Groups[1].Value.Trim()
-                    PackageName = $packageNameMatch.Groups[1].Value.Trim()
-                })
-            }
-        }
-        $allAppPackages = $allAppPackages | Sort-Object DisplayName
         Write-ColorText $langStrings.appRemoveExcludingCritical $Cyan
         $filteredAppPackages = $allAppPackages | Where-Object {
             $currentPackage = $_
             $isExcluded = $false
-            foreach ($pattern in $appExclusionList) { 
+            foreach ($pattern in $appExclusionList) {
                 if ($currentPackage.PackageName -like $pattern) {
                     $isExcluded = $true
                     break
@@ -787,12 +1167,15 @@ function Remove-WindowsApps {
         if ($selection -eq 'go_back' -or !$selection) { return }
         if ($selection -contains $menuOptions.Length) {
             $packagesToRemove.AddRange($filteredAppPackages.PackageName)
+            $selectorsToRemove.AddRange([string[]]$filteredAppPackages.DisplayName)
         } else {
             foreach ($selectedIndex in $selection) {
                 $packagesToRemove.Add($filteredAppPackages[$selectedIndex - 1].PackageName)
+                $selectorsToRemove.Add($filteredAppPackages[$selectedIndex - 1].DisplayName)
             }
         }
         $global:ScriptConfig.RemovedApps = $packagesToRemove
+        $global:ScriptConfig.RemovedAppSelectors = $selectorsToRemove
     }
     if ($packagesToRemove.Count -eq 0) {
         if ($script:runMode -eq 'MANUAL') {
@@ -801,19 +1184,30 @@ function Remove-WindowsApps {
         }
         return
     }
+    $removalErrors = [System.Collections.Generic.List[string]]::new()
     Write-ColorText "`n$($langStrings.appRemoveStarting)" $Green
     foreach ($packageName in $packagesToRemove) {
         Write-ColorText ($langStrings.appRemoveRemoving -f $packageName) $Yellow
         try {
-            & $global:dismPath /Image:$mountPath /Remove-ProvisionedAppxPackage /PackageName:$packageName | Out-Null
-            if ($LASTEXITCODE -eq 0) {
-                Write-ColorText ($langStrings.appRemoveSuccess -f $packageName) $Green
-            } else {
-                Write-ColorText ($langStrings.appRemoveFail -f $packageName, $LASTEXITCODE) $Red
-            }
+            Invoke-Dism -Arguments @("/Image:$mountPath", '/Remove-ProvisionedAppxPackage', "/PackageName:$packageName") -Quiet
+            Write-ColorText ($langStrings.appRemoveSuccess -f $packageName) $Green
         } catch {
             Write-ColorText ($langStrings.appRemoveError -f $packageName, $_) $Red
+            $removalErrors.Add("$packageName`: $($_.Exception.Message)")
         }
+    }
+    if ($script:runMode -eq 'AUTOMATIC' -and $selectorsToRemove.Count -gt 0) {
+        $remainingPackages = @(Get-ProvisionedAppPackages -MountPath $mountPath)
+        $remainingSelectors = @($selectorsToRemove | Where-Object {
+            $selector = $_
+            $remainingPackages.DisplayName -icontains $selector
+        })
+        if ($remainingSelectors.Count -gt 0) {
+            $removalErrors.Add("Selectors still present after removal: $($remainingSelectors -join ', ')")
+        }
+    }
+    if ($script:runMode -eq 'AUTOMATIC' -and $removalErrors.Count -gt 0) {
+        throw "Provisioned app removal validation failed: $($removalErrors -join '; ')"
     }
     Write-ColorText "`n$($langStrings.appRemoveComplete)" $Cyan
     if ($script:runMode -ne 'AUTOMATIC') { Suspend-Script }
@@ -830,17 +1224,17 @@ function Enable-Features {
     }
 
     $featuresToEnable = [System.Collections.Generic.List[object]]::new()
-    
+
     # Decide whether to run in automatic or manual mode
     if ($script:runMode -eq 'AUTOMATIC' -and $global:ScriptConfig.EnabledFeatures.Count -gt 0) {
         Write-ColorText $langStrings.featureEnableFromConfig $Cyan
         $selectedFeatureIDs = $global:ScriptConfig.EnabledFeatures
-        $featuresToEnable.AddRange(($allFeatures | Where-Object { $selectedFeatureIDs -contains $_.FeatureName }))
+        $featuresToEnable.AddRange([object[]]@($allFeatures | Where-Object { $selectedFeatureIDs -contains $_.FeatureName }))
     } else { # Manual mode
         # Build menu options by fetching descriptions from the language file
         $menuOptions = ($allFeatures | ForEach-Object { $global:langStrings["feature_$($_.FeatureName)_desc"] }) + $langStrings.featureEnableApplyAll
         $selection = Get-UserChoice -Title $langStrings.featureEnableTitle -Options $menuOptions -MultiSelect $true
-        
+
         if ($selection -eq 'go_back' -or !$selection) { return }
 
         if ($selection -contains $menuOptions.Length) {
@@ -863,31 +1257,18 @@ function Enable-Features {
         # Get the localized display name for the feature from the language file
         $featureNameDisplay = $global:langStrings["feature_$($feature.FeatureName)_desc"]
         Write-ColorText ($langStrings.featureEnableEnabling -f $featureNameDisplay) $Green
-        
+
         try {
-            $dismParams = @("/Image:C:\mount", "/Enable-Feature", "/FeatureName:$($feature.FeatureName)", "/All")
+            $dismParams = @("/Image:$($script:MountPath)", "/Enable-Feature", "/FeatureName:$($feature.FeatureName)", "/All")
             if ($feature.Source) {
-                $dismParams += @("/LimitAccess", "/Source:$($feature.Source)")
+                $sourcePath = Join-Path $script:IsoContentPath $feature.Source
+                $dismParams += @("/LimitAccess", "/Source:$sourcePath")
             }
-            
-            # Execute DISM and capture all output streams (standard and error)
-            $dismOutput = & $global:dismPath $dismParams 2>&1
-            
-            # Check the exit code of the last external command
-            if ($LASTEXITCODE -eq 0) {
-                Write-ColorText ($langStrings.featureEnableSuccess -f $featureNameDisplay) $Green
-            } else {
-                # If DISM fails, parse the error from its output and throw a proper exception
-                $errorMessage = ($dismOutput | Where-Object { $_ -match "Error:" } | Select-Object -First 1) -replace "Error:", ""
-                if ([string]::IsNullOrWhiteSpace($errorMessage)) {
-                    $errorMessage = "DISM Exit Code: $LASTEXITCODE"
-                }
-                # Throw a custom error that will be caught by the catch block
-                throw ($langStrings.featureEnableError -f $featureNameDisplay, $errorMessage.Trim())
-            }
+
+            Invoke-Dism -Arguments $dismParams -Quiet
+            Write-ColorText ($langStrings.featureEnableSuccess -f $featureNameDisplay) $Green
         } catch {
-            # Catch the thrown error and display it in red
-            Write-ColorText $_.Exception.Message $Red
+            Write-ColorText ($langStrings.featureEnableError -f $featureNameDisplay, $_.Exception.Message) $Red
         }
     }
 
@@ -896,12 +1277,45 @@ function Enable-Features {
 
 # Commits all changes, optimizes ALL WIM indexes, and creates the final bootable ISO file.
 function Complete-Image {
-    Remove-Item -Path "C:\mount\dism.log" -Force -ErrorAction SilentlyContinue
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        if ($Unattended) {
+            throw "Specify -OutputIsoPath when using unattended mode."
+        }
+        Add-Type -AssemblyName System.Windows.Forms
+        $SaveFileDialog = New-Object System.Windows.Forms.SaveFileDialog
+        $SaveFileDialog.Title = $langStrings.completeSaveFileTitle
+        $SaveFileDialog.Filter = "ISO files (*.iso)|*.iso|All files (*.*)|*.*"
+        $SaveFileDialog.DefaultExt = "iso"
+        $SaveFileDialog.FileName = $langStrings.completeDefaultIsoName
+        $SaveFileDialog.InitialDirectory = [Environment]::GetFolderPath("Desktop")
+        if ($SaveFileDialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
+            Write-ColorText $langStrings.completeOutputCanceled $Red
+            return $false
+        }
+        $Path = $SaveFileDialog.FileName
+    }
+
+    $outputIso = [System.IO.Path]::GetFullPath($Path)
+    $workspaceRoot = $script:WorkingDirectory.TrimEnd('\') + '\'
+    if ($outputIso.StartsWith($workspaceRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "The output ISO path must be outside the WinISOUtil workspace: $outputIso"
+    }
+    $outputDirectory = Split-Path -Parent $outputIso
+    if (-not (Test-Path -LiteralPath $outputDirectory -PathType Container)) {
+        throw "The output ISO directory does not exist: $outputDirectory"
+    }
+    Write-Host ($langStrings.completeOutputIsoPath -f $outputIso) -ForegroundColor Green
+    Remove-Item -LiteralPath (Join-Path $script:MountPath 'dism.log') -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 3
     try {
+        $dismPath = $global:dismPath
+        $mountPath = $script:MountPath
+        $completeUnmountFail = $langStrings.completeUnmountFail
         $commitScriptBlock = {
-            & $using:global:dismPath /Unmount-Image /MountDir:"C:\mount" /Commit
-            if ($LASTEXITCODE -ne 0) { throw ($using:langStrings.completeUnmountFail -f $LASTEXITCODE) }
+            & $using:dismPath /English /Unmount-Image "/MountDir:$using:mountPath" /Commit
+            if ($LASTEXITCODE -ne 0) { throw ($using:completeUnmountFail -f $LASTEXITCODE) }
         }
         Invoke-LongRunningOperation -ScriptBlock $commitScriptBlock -Message $langStrings.longOpSavingImage
     } catch {
@@ -910,52 +1324,43 @@ function Complete-Image {
     }
 
     try {
-        $sourceWim = "C:\temp_iso\sources\install.wim"
-        $optimizedWim = "C:\temp_iso\sources\install_optimized.wim"
-        $imageInfo = & $global:dismPath /Get-ImageInfo /ImageFile:$sourceWim
+        $sourceWim = Join-Path $script:IsoContentPath 'sources\install.wim'
+        $optimizedWim = Join-Path $script:IsoContentPath 'sources\install_optimized.wim'
+        $imageInfo = Invoke-Dism -Arguments @('/Get-ImageInfo', "/ImageFile:$sourceWim") -PassThru -Quiet
         $indexes = $imageInfo | Where-Object { $_ -match "^\s*Index : \d+\s*$" } | ForEach-Object { ($_ -split ":")[1].Trim() }
         if ($indexes.Count -eq 0) { throw "No image indexes found." }
-        
-        $exportScriptBlock = {
-            foreach ($index in $using:indexes) {
-                & $using:global:dismPath /Export-Image /SourceImageFile:$using:sourceWim /SourceIndex:$index /DestinationImageFile:$using:optimizedWim /Compress:maximum
-                if ($LASTEXITCODE -ne 0) { throw ("WIM optimization failed on index $index") }
-            }
-        }
-        Invoke-LongRunningOperation -ScriptBlock $exportScriptBlock -Message "Optimizing WIM..."
 
-        Remove-Item -Path $sourceWim -Force
-        Rename-Item -Path $optimizedWim -NewName "install.wim"
+        if (-not $SkipWimOptimization) {
+            $exportScriptBlock = {
+                foreach ($index in $using:indexes) {
+                    & $using:dismPath /English /Export-Image "/SourceImageFile:$using:sourceWim" "/SourceIndex:$index" "/DestinationImageFile:$using:optimizedWim" /Compress:maximum
+                    if ($LASTEXITCODE -ne 0) { throw ("WIM optimization failed on index $index") }
+                }
+            }
+            Invoke-LongRunningOperation -ScriptBlock $exportScriptBlock -Message $langStrings.longOpOptimizingWim
+
+            Remove-Item -LiteralPath $sourceWim -Force -ErrorAction Stop
+            Rename-Item -LiteralPath $optimizedWim -NewName "install.wim" -ErrorAction Stop
+        }
     } catch {
         Write-ColorText ("WIM optimization failed: $_. Will use unoptimized file.") $Red
-        if (Test-Path $optimizedWim) { Remove-Item -Path $optimizedWim -Force }
+        if (Test-Path -LiteralPath $optimizedWim) { Remove-Item -LiteralPath $optimizedWim -Force }
     }
 
     Write-ColorText $langStrings.completeCreatingIso $Green
-    Add-Type -AssemblyName System.Windows.Forms
-    $SaveFileDialog = New-Object System.Windows.Forms.SaveFileDialog
-    $SaveFileDialog.Title = $langStrings.completeSaveFileTitle
-    $SaveFileDialog.Filter = "ISO files (*.iso)|*.iso|All files (*.*)|*.*"
-    $SaveFileDialog.DefaultExt = "iso"
-    $SaveFileDialog.FileName = $langStrings.completeDefaultIsoName
-    $SaveFileDialog.InitialDirectory = [Environment]::GetFolderPath("Desktop")
-    if ($SaveFileDialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
-        Write-ColorText $langStrings.completeOutputCanceled $Red
-        return
-    }
-    $outputIso = $SaveFileDialog.FileName
-    Write-Host ($langStrings.completeOutputIsoPath -f $outputIso) -ForegroundColor Green
     try {
-        $bootData = '2#p0,e,bC:\temp_iso\boot\etfsboot.com#pEF,e,bC:\temp_iso\efi\microsoft\boot\efisys.bin'
-        & $global:oscdimgPath -m -o -u2 -udfver102 -bootdata:$bootData C:\temp_iso $outputIso
-        
+        $bootData = "2#p0,e,b$(Join-Path $script:IsoContentPath 'boot\etfsboot.com')#pEF,e,b$(Join-Path $script:IsoContentPath 'efi\microsoft\boot\efisys.bin')"
+        & $global:oscdimgPath -m -o -u2 -udfver102 "-bootdata:$bootData" $script:IsoContentPath $outputIso
+
         if ($LASTEXITCODE -ne 0) { throw ("oscdimg Exit Code: $LASTEXITCODE") }
-        
+
         Write-ColorText ($langStrings.completeIsoSuccess -f $outputIso) $Green
         Cleanup
+        return $true
     } catch {
         Write-ColorText ($langStrings.completeIsoError -f $_) $Red
-        Write-ColorText $langStrings.completeFilesSaved $Yellow
+        Write-ColorText ($langStrings.completeFilesSaved -f $script:IsoContentPath) $Yellow
+        return $false
     }
 }
 
@@ -964,36 +1369,66 @@ function Cleanup {
     $cleanupMsg = if ($null -ne $langStrings) { $langStrings.cleanupCleaning } else { "Cleaning up..." }
     Write-ColorText $cleanupMsg $Green
     [gc]::Collect(); [gc]::WaitForPendingFinalizers()
-    try { REG UNLOAD HKU\TEMP 2>$null } catch {}
-    try { REG UNLOAD HKLM\TEMP 2>$null } catch {}
-    if (Test-Path "C:\mount\Windows") {
+    try { & reg.exe UNLOAD HKU\TEMP 2>$null | Out-Null } catch {}
+    try { & reg.exe UNLOAD HKLM\TEMP 2>$null | Out-Null } catch {}
+    try { & reg.exe UNLOAD HKLM\TEMPSYSTEM 2>$null | Out-Null } catch {}
+    if (-not (Test-OwnedWorkspace)) {
+        Write-ColorText "Skipping filesystem cleanup because the workspace is not owned by WinISOUtil." $Yellow
+        return
+    }
+    if (Test-Path -LiteralPath (Join-Path $script:MountPath 'Windows')) {
         $mountedMsg = if ($null -ne $langStrings) { $langStrings.cleanupImageMounted } else { "Discarding mounted image..." }
         Write-ColorText $mountedMsg $Yellow
-        & $global:dismPath /Unmount-Image /MountDir:"C:\mount" /Discard
+        try {
+            Invoke-Dism -Arguments @('/Unmount-Image', "/MountDir:$($script:MountPath)", '/Discard') -Quiet
+        } catch {
+            Write-ColorText "Mounted image could not be discarded. Workspace files were preserved: $_" $Red
+            return
+        }
     }
-    if (Test-Path "C:\temp_iso") { Remove-Item "C:\temp_iso" -Recurse -Force -ErrorAction SilentlyContinue }
-    if (Test-Path "C:\mount") { Remove-Item "C:\mount" -Recurse -Force -ErrorAction SilentlyContinue }
+    try { Remove-OwnedWorkspaceItem -Path $script:IsoContentPath } catch { Write-ColorText $_ $Red }
+    try { Remove-OwnedWorkspaceItem -Path $script:MountPath } catch { Write-ColorText $_ $Red }
+    Remove-Item -LiteralPath $script:WorkspaceMarkerPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $script:WorkingDirectory -Force -ErrorAction SilentlyContinue
     $completeMsg = if ($null -ne $langStrings) { $langStrings.cleanupComplete } else { "Cleanup complete." }
     Write-ColorText $completeMsg $Green
 }
 
 # --- SCRIPT EXECUTION START ---
 
-Clear-Host
-Write-ColorText "================================================================" $Cyan
-Write-ColorText "     Lütfen bir dil seçin / Please select a language     " $Cyan
-Write-ColorText "================================================================" $Cyan
-Write-Host ""
-Write-ColorText "1. Türkçe" $White
-Write-ColorText "2. English" $White
-Write-Host ""
-$langChoice = Read-Host "Seçiminiz / Your choice"
-switch ($langChoice) {
-    "1" { $global:currentLanguage = 'tr' }
-    "2" { $global:currentLanguage = 'en' }
-    default {
-        Write-Host "Invalid selection, defaulting to English." -ForegroundColor Yellow
-        $global:currentLanguage = 'en'
+if (-not [string]::IsNullOrWhiteSpace($Language)) {
+    $global:currentLanguage = $Language
+} elseif ($Unattended) {
+    $global:currentLanguage = 'en'
+} else {
+    Clear-Host
+    Write-ColorText "================================================================" $Cyan
+    Write-ColorText "     Lütfen bir dil seçin / Please select a language     " $Cyan
+    Write-ColorText "================================================================" $Cyan
+    Write-Host ""
+    Write-ColorText "1. Türkçe" $White
+    Write-ColorText "2. English" $White
+    Write-Host ""
+    $langChoice = Read-Host "Seçiminiz / Your choice"
+    switch ($langChoice) {
+        "1" { $global:currentLanguage = 'tr' }
+        "2" { $global:currentLanguage = 'en' }
+        default {
+            Write-Host "Invalid selection, defaulting to English." -ForegroundColor Yellow
+            $global:currentLanguage = 'en'
+        }
+    }
+}
+
+if ($Unattended) {
+    if ([string]::IsNullOrWhiteSpace($IsoPath)) {
+        throw "Specify -IsoPath when using unattended mode."
+    }
+    if ([string]::IsNullOrWhiteSpace($ConfigurationPath)) {
+        throw "Specify -ConfigurationPath when using unattended mode."
+    }
+    if ([string]::IsNullOrWhiteSpace($OutputIsoPath)) {
+        throw "Specify -OutputIsoPath when using unattended mode."
     }
 }
 
@@ -1001,7 +1436,7 @@ try {
     . (Join-Path $PSScriptRoot "src/languages.ps1")
 } catch {
     Write-ColorText "CRITICAL ERROR: languages.ps1 could not be loaded." $Red
-    Read-Host "Press Enter to exit."
+    if (-not $Unattended) { Read-Host "Press Enter to exit." }
     exit 1
 }
 
@@ -1016,21 +1451,19 @@ if (-not $global:oscdimgPath) {
     Show-Banner
     Write-ColorText $langStrings.oscdimgNotFoundTitle $Red
     Write-ColorText $langStrings.oscdimgNotFoundDesc1 $Cyan
-    Read-Host; exit 1
+    if (-not $Unattended) { Read-Host }
+    exit 1
 }
 
 Show-Banner
 
 if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]"Administrator")) {
     Write-ColorText $langStrings.scriptNotAdmin $Red
-    Start-Sleep -Seconds 5
+    if (-not $Unattended) { Start-Sleep -Seconds 5 }
     exit 1
 }
 
-if (Test-Path "C:\mount\Windows") {
-    Write-ColorText $langStrings.scriptExistingMount $Yellow
-    Start-Sleep -Seconds 3
-} else {
+if ([string]::IsNullOrWhiteSpace($IsoPath)) {
     Add-Type -AssemblyName System.Windows.Forms
     $OpenFileDialog = New-Object System.Windows.Forms.OpenFileDialog
     $OpenFileDialog.Title = $langStrings.scriptSelectIso
@@ -1040,45 +1473,78 @@ if (Test-Path "C:\mount\Windows") {
         exit
     }
     $IsoPath = $OpenFileDialog.FileName
-    Write-Host ($langStrings.scriptIsoSelected -f $IsoPath) -ForegroundColor Green
-    
-    Initialize-Environment
-    Copy-IsoFiles -IsoPath $IsoPath
+}
+
+if (-not (Test-Path -LiteralPath $IsoPath -PathType Leaf) -or [System.IO.Path]::GetExtension($IsoPath) -ine '.iso') {
+    throw ($langStrings.scriptIsoInvalid -f $IsoPath)
+}
+
+$IsoPath = [System.IO.Path]::GetFullPath($IsoPath)
+Write-Host ($langStrings.scriptIsoSelected -f $IsoPath) -ForegroundColor Green
+
+Initialize-Environment
+Copy-IsoFiles -IsoPath $IsoPath
+if (-not $Unattended) {
     Remove-WindowsEditions
-    if (-not (Mount-WindowsImage)) {
-        Write-ColorText $langStrings.scriptMountFail $Red
-        Cleanup
-        exit 1
-    }
-    
+}
+if (-not (Mount-WindowsImage -Index $EditionIndex)) {
+    Write-ColorText $langStrings.scriptMountFail $Red
+    Cleanup
+    exit 1
+}
+
+if (-not [string]::IsNullOrWhiteSpace($UpdatesPath)) {
+    Add-WindowsUpdates -Path $UpdatesPath
+} elseif (-not $Unattended) {
     Show-Banner
     $updateChoice = Read-Host "$($langStrings.scriptPromptUpdate) "
     if ($updateChoice -ieq 'E' -or $updateChoice -ieq 'Y') { Add-WindowsUpdates }
+}
+
+if (-not [string]::IsNullOrWhiteSpace($DriversPath)) {
+    Add-Drivers -Path $DriversPath
+} elseif (-not $Unattended) {
     Show-Banner
     $driverChoice = Read-Host "$($langStrings.scriptPromptDriver) "
     if ($driverChoice -ieq 'E' -or $driverChoice -ieq 'Y') { Add-Drivers }
+}
 
-    if (Import-Configuration) {
-        $script:runMode = 'AUTOMATIC'
-    }
+if (Import-Configuration -Path $ConfigurationPath) {
+    $script:runMode = 'AUTOMATIC'
+} elseif ($Unattended) {
+    Write-ColorText $langStrings.importReadError $Red
+    Cleanup
+    exit 1
 }
 
 if ($script:runMode -eq 'AUTOMATIC') {
     Write-ColorText "`n$($langStrings.execAutoModeStarted)" $Cyan
     if ($global:ScriptConfig.ComponentServiceTweaks.Count -gt 0) { Set-ComponentsAndServices }
     if ($global:ScriptConfig.RegistryTweaks.Count -gt 0) { Set-Registry }
-    if ($global:ScriptConfig.RemovedApps.Count -gt 0) { Remove-WindowsApps }
+    if ($global:ScriptConfig.RemovedApps.Count -gt 0 -or $global:ScriptConfig.RemovedAppSelectors.Count -gt 0) { Remove-WindowsApps }
     if ($global:ScriptConfig.EnabledFeatures.Count -gt 0) { Enable-Features }
     Write-ColorText "`n$($langStrings.execAutoModeCompleted)" $Cyan
-    
-    $extraChoice = Read-Host "$($langStrings.execAutoPromptManual) "
-    if ($extraChoice -ieq 'E' -or $extraChoice -ieq 'Y') {
-        $script:runMode = 'MANUAL'
-    } else {
+
+    if ($Unattended) {
         Write-ColorText $langStrings.execAutoCreateIso $Green
-        Start-Sleep -Seconds 2
-        Complete-Image
-        $script:runMode = 'FINISHED'
+        if (Complete-Image -Path $OutputIsoPath) {
+            $script:runMode = 'FINISHED'
+        } else {
+            exit 1
+        }
+    } else {
+        $extraChoice = Read-Host "$($langStrings.execAutoPromptManual) "
+        if ($extraChoice -ieq 'E' -or $extraChoice -ieq 'Y') {
+            $script:runMode = 'MANUAL'
+        } else {
+            Write-ColorText $langStrings.execAutoCreateIso $Green
+            Start-Sleep -Seconds 2
+            if (Complete-Image -Path $OutputIsoPath) {
+                $script:runMode = 'FINISHED'
+            } else {
+                $script:runMode = 'MANUAL'
+            }
+        }
     }
 }
 
@@ -1108,7 +1574,7 @@ if ($script:runMode -eq 'MANUAL') {
             "5" { Remove-WindowsApps }
             "6" { Enable-Features }
             "7" { Export-Configuration }
-            "8" { Complete-Image; $choice = "exit" }
+            "8" { if (Complete-Image -Path $OutputIsoPath) { $choice = "exit" } }
             "9" { Cleanup; $choice = "exit" }
             default { Write-Host $langStrings.invalidChoice -ForegroundColor Red; Start-Sleep -Seconds 2 }
         }
@@ -1116,4 +1582,4 @@ if ($script:runMode -eq 'MANUAL') {
 }
 
 Write-ColorText $langStrings.finishMessage $Yellow
-Read-Host
+if (-not $Unattended) { Read-Host }

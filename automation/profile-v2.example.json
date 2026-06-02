@@ -1,0 +1,8 @@
+{
+  "SchemaVersion": 2,
+  "Description": "Example unattended WinISOUtil profile",
+  "RemovedAppSelectors": [],
+  "RegistryTweaks": [],
+  "EnabledFeatures": [],
+  "ComponentServiceTweaks": []
+}

@@ -1,4 +1,4 @@
-﻿# Language Strings
+# Language Strings
 # Supported languages: English (en), Turkish (tr)
 # To add a new language, create a new hashtable with the appropriate translations.
 
@@ -20,6 +20,7 @@ switch ($global:currentLanguage) {
             # Uzun Süren İşlemler
             longOpFailed               = "Arka plan işleminde hata oluştu: {0}"
             longOpSavingImage          = "Image değişiklikleri kaydediliyor, bu işlem uzun sürebilir..."
+            longOpOptimizingWim        = "WIM optimize ediliyor, bu işlem uzun sürebilir..."
             # Get-UserChoice
             getUserChoiceMultiSelect   = "Birden fazla seçim yapabilirsiniz (örn: 1,3,5), 'tümü' veya 'g' (geri):"
             getUserChoiceSingleSelect  = "Seçiminiz (1-{0} veya 'g')"
@@ -54,6 +55,7 @@ switch ($global:currentLanguage) {
             # ISO Kopyalama
             copyIsoCopying             = "ISO dosyaları kopyalanıyor..."
             copyIsoUnlockingWim        = "install.wim dosyasının salt okunur özelliği kaldırılıyor..."
+            copyIsoConvertingEsd       = "install.esd bulundu. Düzenlenebilir install.wim dosyasına dönüştürülüyor..."
             copyIsoSuccess             = "ISO dosyaları kopyalandı!"
             copyIsoError               = "ISO dosyaları kopyalanırken hata oluştu: {0}"
             copyIsoFail                = "ISO kopyalama başarısız."
@@ -69,6 +71,7 @@ switch ($global:currentLanguage) {
             removeEditionsPrompt       = "Kaldırmak istediğiniz sürümlerin index numaralarını girin (virgülle ayırarak, örn: 1,3)"
             removeEditionsGoBack       = "[g] Geri dön ve düzenlenecek sürümü seç"
             removeEditionsInvalidIndex = "Geçersiz index numarası bulundu: {0}. Lütfen 1 ile {1} arasında değerler girin."
+            removeEditionsKeepOne      = "En az bir Windows sürümü korunmalıdır."
             removeEditionsRemoving     = "Index {0} kaldırılıyor..."
             removeEditionsSuccess      = "Index {0} başarıyla kaldırıldı!"
             removeEditionsError        = "Index {0} kaldırılırken hata oluştu: {1}"
@@ -76,7 +79,7 @@ switch ($global:currentLanguage) {
             removeEditionsInvalidInput = "Geçersiz giriş! Lütfen sayıları virgülle ayırarak girin (örn: 1,3)."
             # Image Mount Etme
             mountListingEditions       = "Mevcut Windows sürümleri listeleniyor..."
-            mountMountingImage         = "Windows imajı C:\mount dizinine mount ediliyor..."
+            mountMountingImage         = "Windows imajı çalışma dizinine mount ediliyor..."
             mountSuccess               = "İmaj başarıyla mount edildi!"
             mountError                 = "İmaj mount edilirken hata oluştu: {0}"
             mountFail                  = "Mount işlemi başarısız."
@@ -112,6 +115,7 @@ switch ($global:currentLanguage) {
             compSvcStateNotEnabled     = " -> Bileşen etkin değil (Durum: {0}). İşlem atlandı."
             compSvcStateError          = " -> Bileşen durumu okunamadı veya bileşen bulunamadı. İşlem atlandı."
             compSvcCriticalError       = " -> Bileşen durumu kontrol edilirken veya kaldırılırken kritik hata: {0}"
+            compSvcFeatureAbsent       = " -> '{0}' özelliği bu imajda bulunmuyor. Hedef durum zaten sağlanmış."
             compSvcTweakDefNotFound    = "KRİTİK HATA: components.ps1 bulunamadı veya yüklenemedi."
             # Component Descriptions
             comp_RemoveIE_desc         = "Internet Explorer'ı Kaldır (Eski bileşenleri temizler)"
@@ -163,7 +167,6 @@ switch ($global:currentLanguage) {
             tweak_DisableEdgeContentFeatures_desc    = "Edge'deki alışveriş asistanı, MSN haberleri ve diğer içerik özelliklerini kapat"
             tweak_DisableSystemPerformanceTweaks_desc= "Performans ve tepki süresi için sistem ayarları yap"
             tweak_ConfigureCrashControl_desc         = "Mavi ekran (BSOD) ayarlarını yapılandır (Otomatik yeniden başlatmayı kapat)"
-            tweak_DisableWPBT_desc                  = "WPBT'yi devre dışı bırakarak OEM bloatware'ini engelle"
             tweak_EnableRestartApps_desc             = "Yeniden başlatırken uygulamaları otomatik olarak geri yükle"
             tweak_ForceOfflineAccount_desc           = "Kurulumda çevrimdışı (yerel) hesap kullanmaya zorla (OOBE)"
             tweak_DisableStickyKeys_desc             = "Yapışkan Tuşlar uyarılarını devre dışı bırak"
@@ -208,7 +211,7 @@ switch ($global:currentLanguage) {
             completeOutputIsoPath      = "Çıktı ISO dosyası yolu: {0}"
             completeIsoSuccess         = "ISO başarıyla oluşturuldu: {0}"
             completeIsoError           = "ISO oluşturulurken hata oluştu: {0}"
-            completeFilesSaved         = "Dosyalarınız C:\temp_iso klasöründe korunuyor."
+            completeFilesSaved         = "Dosyalarınız {0} klasöründe korunuyor."
             completeUnmountFail        = "Unmount/Commit işlemi başarısız oldu. Çıkış Kodu: {0}"
             completeSaveError          = "`nİmaj kaydedilirken kritik bir hata oluştu: {0}"
             completeFinalizeFail       = "İmaj sonlandırılamadı."
@@ -265,6 +268,7 @@ switch ($global:currentLanguage) {
             # Long Running Operation
             longOpFailed               = "An error occurred in the background job: {0}"
             longOpSavingImage          = "Saving image changes, this may take a long time..."
+            longOpOptimizingWim        = "Optimizing WIM, this may take a long time..."
             # Get-UserChoice
             getUserChoiceMultiSelect   = "You can make multiple selections (e.g., 1,3,5), 'all' or 'g' (back):"
             getUserChoiceSingleSelect  = "Your choice (1-{0} or 'g')"
@@ -299,6 +303,7 @@ switch ($global:currentLanguage) {
             # ISO Copy
             copyIsoCopying             = "Copying ISO files..."
             copyIsoUnlockingWim        = "Removing read-only attribute from install.wim..."
+            copyIsoConvertingEsd       = "install.esd was found. Converting it to an editable install.wim file..."
             copyIsoSuccess             = "ISO files copied!"
             copyIsoError               = "Error copying ISO files: {0}"
             copyIsoFail                = "ISO copy failed."
@@ -314,6 +319,7 @@ switch ($global:currentLanguage) {
             removeEditionsPrompt       = "Enter the index numbers of the editions to remove (comma-separated, e.g., 1,3)"
             removeEditionsGoBack       = "[g] Go back and select edition to edit"
             removeEditionsInvalidIndex = "Invalid index number found: {0}. Please enter values between 1 and {1}."
+            removeEditionsKeepOne      = "At least one Windows edition must be preserved."
             removeEditionsRemoving     = "Removing index {0}..."
             removeEditionsSuccess      = "Index {0} successfully removed!"
             removeEditionsError        = "Error removing index {0}: {1}"
@@ -321,7 +327,7 @@ switch ($global:currentLanguage) {
             removeEditionsInvalidInput = "Invalid input! Please enter numbers separated by commas (e.g., 1,3)."
             # Mount Image
             mountListingEditions       = "Listing current Windows editions..."
-            mountMountingImage         = "Mounting Windows image to C:\mount..."
+            mountMountingImage         = "Mounting Windows image to the workspace..."
             mountSuccess               = "Image mounted successfully!"
             mountError                 = "Error mounting image: {0}"
             mountFail                  = "Mount operation failed."
@@ -357,6 +363,7 @@ switch ($global:currentLanguage) {
             compSvcStateNotEnabled     = " -> Component not enabled (State: {0}). Operation skipped."
             compSvcStateError          = " -> Could not read component state or component not found. Operation skipped."
             compSvcCriticalError       = " -> Critical error while checking or removing component state: {0}"
+            compSvcFeatureAbsent       = " -> Feature '{0}' is not present in this image. The desired state is already satisfied."
             compSvcTweakDefNotFound    = "CRITICAL ERROR: component-definitions.ps1 could not be found or loaded."
              # Component Descriptions
             comp_RemoveIE_desc         = "Remove Internet Explorer (Cleans up old components)"
@@ -408,7 +415,6 @@ switch ($global:currentLanguage) {
             tweak_DisableEdgeContentFeatures_desc    = "Disable shopping assistant, MSN news, and other content features in Edge"
             tweak_DisableSystemPerformanceTweaks_desc= "Apply system tweaks for performance and responsiveness"
             tweak_ConfigureCrashControl_desc         = "Configure crash control (BSOD) settings (Disable auto-reboot)"
-            tweak_DisableWPBT_desc                   = "Disable WPBT to prevent OEM bloatware execution"
             tweak_EnableRestartApps_desc             = "Automatically restore apps on restart"
             tweak_ForceOfflineAccount_desc           = "Force using an offline (local) account during setup (OOBE)"
             tweak_DisableStickyKeys_desc             = "Disable Sticky Keys prompts"
@@ -453,7 +459,7 @@ switch ($global:currentLanguage) {
             completeOutputIsoPath      = "Output ISO file path: {0}"
             completeIsoSuccess         = "ISO created successfully: {0}"
             completeIsoError           = "Error creating ISO: {0}"
-            completeFilesSaved         = "Your files are preserved in the C:\temp_iso folder."
+            completeFilesSaved         = "Your files are preserved in the {0} folder."
             completeUnmountFail        = "Unmount/Commit operation failed. Exit Code: {0}"
             completeSaveError          = "`nA critical error occurred while saving the image: {0}"
             completeFinalizeFail       = "Could not finalize the image."

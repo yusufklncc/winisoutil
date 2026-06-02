@@ -1,4 +1,4 @@
-﻿# Define all available tweaks and their actions.
+# Define all available tweaks and their actions.
 # This file only contains the unique ID and the action/code for each tweak.
 # All user-facing descriptions are stored in 'languages.ps1' for easier localization.
 # The main script will fetch the description from the language file using a key like 'tweak_ID_desc'.
@@ -147,6 +147,7 @@ $allTweaks = @(
             # Disables handwriting error reports, preventing the sending of error reports related to handwriting input.
             Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\HandwritingErrorReports' -Name 'PreventHandwritingErrorReports' -Value 1 -Type DWord -Force
             # Disables Text Input Personalization, preventing the collection of typing and input data for personalization purposes.
+            New-Item -Path 'Registry::HKU\TEMP\Software\Microsoft\Input\TIPC' -Force -ErrorAction SilentlyContinue | Out-Null
             Set-ItemProperty -Path 'Registry::HKU\TEMP\Software\Microsoft\Input\TIPC' -Name 'Enabled' -Value 0 -Type DWord -Force
             New-Item -Path 'Registry::HKLM\TEMP\SOFTWARE\Microsoft\Input\TIPC' -Force -ErrorAction SilentlyContinue | Out-Null
             # Disables the Text Input Personalization feature, preventing the collection of typing and input data for personalization purposes.
@@ -185,9 +186,6 @@ $allTweaks = @(
             Set-ItemProperty -Path 'Registry::HKLM\TEMP\SOFTWARE\Policies\Microsoft\AppV\CEIP' -Name 'CEIPEnable' -Value 0 -Type DWord -Force
             New-Item -Path 'Registry::HKLM\TEMP\SOFTWARE\Policies\Microsoft\SQMClient\Windows' -Force -ErrorAction SilentlyContinue | Out-Null
             Set-ItemProperty -Path 'Registry::HKLM\TEMP\SOFTWARE\Policies\Microsoft\SQMClient\Windows' -Name 'CEIPEnable' -Value 0 -Type DWord -Force
-            New-Item -Path 'Registry::HKLM\TEMP\SYSTEM\CurrentControlSet\Control\Diagnostics\Performance' -Force -ErrorAction SilentlyContinue | Out-Null
-            # Disables diagnostic tracing for performance monitoring, preventing the collection of performance-related diagnostic data.
-            Set-ItemProperty -Path 'Registry::HKLM\TEMP\SYSTEM\CurrentControlSet\Control\Diagnostics\Performance' -Name 'DisableDiagnosticTracing' -Value 1 -Type DWord -Force
             New-Item -Path 'Registry::HKLM\TEMP\SOFTWARE\Policies\Microsoft\Windows\Messaging' -Force -ErrorAction SilentlyContinue | Out-Null
             # Disables message synchronization, preventing the synchronization of messages across devices.
             Set-ItemProperty -Path 'Registry::HKLM\TEMP\SOFTWARE\Policies\Microsoft\Windows\Messaging' -Name 'AllowMessageSync' -Value 0 -Type DWord -Force
@@ -215,6 +213,7 @@ $allTweaks = @(
             # Disables cloud-optimized content, preventing Windows from downloading and displaying content optimized for cloud services.
             Set-ItemProperty -Path $cloudContentPath -Name 'DisableCloudOptimizedContent' -Value 1 -Type DWord -Force
             $contentDeliveryPath = 'Registry::HKU\TEMP\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
+            New-Item -Path $contentDeliveryPath -Force -ErrorAction SilentlyContinue | Out-Null
             # Disables "Suggested Apps" from being automatically installed from the Microsoft Store.
             Set-ItemProperty -Path $contentDeliveryPath -Name 'SubscribedContent-338387Enabled' -Value 0 -Type DWord -Force
             # Disables tips, tricks, and fun facts from appearing on the Windows lock screen.
@@ -281,17 +280,18 @@ $allTweaks = @(
             # Disable Windows Copilot UI and functionality
             Set-ItemProperty -Path 'Registry::HKU\TEMP\Software\Policies\Microsoft\Windows\WindowsCopilot' -Name 'TurnOffWindowsCopilot' -Value 1 -Type DWord -Force
             New-Item -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\WindowsAI' -Force -ErrorAction SilentlyContinue | Out-Null
-            # Disable Recall Enablement, Saving Snapshots, and AI Data Analysis features
+            # Disable Recall availability, snapshot saving, and Click to Do.
             Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\WindowsAI' -Name 'AllowRecallEnablement' -Value 0 -Type DWord -Force
-            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\WindowsAI' -Name 'TurnOffSavingSnapshots' -Value 1 -Type DWord -Force
             Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\WindowsAI' -Name 'DisableAIDataAnalysis' -Value 1 -Type DWord -Force
-            New-Item -Path 'Registry::HKLM\TEMP\SOFTWARE\Policies\Microsoft\Windows\Windows Feeds' -Force -ErrorAction SilentlyContinue | Out-Null
+            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\WindowsAI' -Name 'DisableClickToDo' -Value 1 -Type DWord -Force
             # Disable AI features in Notepad
-            New-Item -Path 'Registry::HKLM\TEMP\WindowsNotepad' -Force -ErrorAction SilentlyContinue | Out-Null
-            Set-ItemProperty -Path 'Registry::HKLM\TEMP\WindowsNotepad' -Name 'DisableAIFeatures' -Value 1 -Type DWord -Force
+            New-Item -Path 'Registry::HKLM\TEMP\Policies\WindowsNotepad' -Force -ErrorAction SilentlyContinue | Out-Null
+            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Policies\WindowsNotepad' -Name 'DisableAIFeatures' -Value 1 -Type DWord -Force
             # Disable AI features in Paint
             New-Item -Path 'Registry::HKLM\TEMP\Microsoft\Windows\CurrentVersion\Policies\Paint' -Force -ErrorAction SilentlyContinue | Out-Null
             Set-ItemProperty -Path 'Registry::HKLM\TEMP\Microsoft\Windows\CurrentVersion\Policies\Paint' -Name 'DisableCocreator' -Value 1 -Type DWord -Force
+            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Microsoft\Windows\CurrentVersion\Policies\Paint' -Name 'DisableGenerativeFill' -Value 1 -Type DWord -Force
+            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Microsoft\Windows\CurrentVersion\Policies\Paint' -Name 'DisableImageCreator' -Value 1 -Type DWord -Force
         }
     },
     [PSCustomObject]@{ 
@@ -345,7 +345,7 @@ $allTweaks = @(
         ID = 'ConfigureCrashControl'; 
         Action = "InlineScript"; 
         Code = {
-            $path = 'Registry::HKLM\TEMP\SYSTEM\CurrentControlSet\Control\CrashControl'
+            $path = "Registry::HKLM\TEMPSYSTEM\$script:OfflineControlSet\Control\CrashControl"
             New-Item -Path $path -Force -ErrorAction SilentlyContinue | Out-Null
             # Disables automatic reboot on system crash
             Set-ItemProperty -Path $path -Name 'AutoReboot' -Value 0 -Type DWord -Force
@@ -373,6 +373,7 @@ $allTweaks = @(
         Action = "InlineScript"; 
         Code = {
             $path = 'Registry::HKLM\TEMP\Microsoft\Windows\CurrentVersion\OOBE'
+            New-Item -Path $path -Force -ErrorAction SilentlyContinue | Out-Null
             # Forces the use of offline accounts during the Out-Of-Box Experience (OOBE) setup process.
             Set-ItemProperty -Path $path -Name 'BypassNRO' -Value 1 -Type DWord -Force
             # Hides the online account creation screens during OOBE.
@@ -384,6 +385,7 @@ $allTweaks = @(
         Action = "InlineScript"; 
         Code = {
             $path = 'Registry::HKU\TEMP\Control Panel\Accessibility\StickyKeys'
+            New-Item -Path $path -Force -ErrorAction SilentlyContinue | Out-Null
             # Disables the Sticky Keys feature, which allows users to press modifier keys (like Shift, Ctrl, Alt) one at a time instead of simultaneously.
             Set-ItemProperty -Path $path -Name 'Flags' -Value '506' -Type String -Force
         }

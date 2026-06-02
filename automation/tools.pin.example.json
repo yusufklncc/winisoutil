@@ -1,0 +1,6 @@
+{
+  "SchemaVersion": 1,
+  "ArchiveUri": "https://example.invalid/reviewed-uup-converter-wimlib.zip",
+  "ArchiveSha256": "REPLACE_WITH_REVIEWED_ARCHIVE_SHA256",
+  "CommandRelativePath": "convert-UUP.cmd"
+}

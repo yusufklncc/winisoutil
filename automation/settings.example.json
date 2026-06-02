@@ -1,0 +1,36 @@
+{
+  "SchemaVersion": 2,
+  "ToolLanguage": "en",
+  "Architecture": "amd64",
+  "Edition": "PROFESSIONAL",
+  "InitialFeatureVersion": "25H2",
+  "FeatureReleaseHoldDays": 30,
+  "RetentionCount": 2,
+  "MinimumFreeSpaceGiB": 50,
+  "DefaultConfigurationPath": "D:\\WinISOUtil\\config\\desktop-v2.json",
+  "WebhookUrl": "",
+  "Targets": [
+    {
+      "Id": "tr-tr-pro",
+      "Locale": "tr-tr"
+    },
+    {
+      "Id": "en-us-pro",
+      "Locale": "en-us"
+    },
+    {
+      "Id": "de-de-pro",
+      "Locale": "de-de",
+      "ConfigurationPath": "D:\\WinISOUtil\\config\\desktop-de-v2.json"
+    }
+  ],
+  "Paths": {
+    "Tools": "D:\\WinISOUtil\\tools",
+    "Cache": "D:\\WinISOUtil\\cache",
+    "Staging": "D:\\WinISOUtil\\staging",
+    "Output": "D:\\WinISOUtil\\output",
+    "Logs": "D:\\WinISOUtil\\logs",
+    "Working": "D:\\WinISOUtil\\work",
+    "State": "D:\\WinISOUtil\\state"
+  }
+}

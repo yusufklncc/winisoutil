@@ -8,16 +8,16 @@
 
 **WinISOUtil**, Windows ISO dosyalarınızı doğrudan değiştirmenize olanak tanıyan, böylece işletim sistemini kurulumdan önce ihtiyaçlarınıza göre yapılandırmanıza imkan veren güçlü bir PowerShell betiğidir. Gereksiz (bloatware) uygulamaları kaldırabilir, gizlilik ayarlarını iyileştirebilir, performans odaklı kayıt defteri ince ayarları uygulayabilir ve sık kullandığınız sürücüleri veya güncellemeleri doğrudan ISO'ya entegre edebilirsiniz.
 
-Bu araç, hem etkileşimli menü tabanlı bir **Manuel Mod**'a hem de daha önce kaydedilmiş bir yapılandırma dosyasını uygulayarak tüm süreci otomatikleştirebilen bir **Otomatik Mod**'a sahiptir.
+Bu araç, hem etkileşimli menü tabanlı bir **Manuel Mod**'a hem de daha önce kaydedilmiş bir yapılandırma dosyasını kullanıcı etkileşimi olmadan uygulayabilen bir **Katılımsız Mod**'a sahiptir.
 
 ---
 
 ## ✨ Temel Özellikler
 
 - **Çoklu Dil Arayüzü**: Türkçe ve İngilizce desteği.
-- **Etkileşimli ve Otomatik Modlar**:
+- **Etkileşimli ve Katılımsız Modlar**:
   - **Manuel Mod**: Hangi bileşenlerin kaldırılacağını veya hangi ayarların uygulanacağını adım adım seçin.
-  - **Otomatik Mod**: Ayarlarınızı bir `.json` dosyasına kaydedin ve aynı yapılandırmayı diğer ISO'lara otomatik olarak uygulayın.
+  - **Katılımsız Mod**: Ayarlarınızı bir `.json` dosyasına kaydedin ve aynı yapılandırmayı güncellenmiş ISO dosyalarına kullanıcı etkileşimi olmadan uygulayın.
 - **ISO Temizliği**:
   - İstenmeyen Windows sürümlerini (ör. Home, Pro) ISO'dan kaldırarak yerden tasarruf edin.
   - Gereksiz hazır Windows uygulamalarını (Bloatware) kurulumdan önce temizleyin.
@@ -30,32 +30,46 @@ Bu araç, hem etkileşimli menü tabanlı bir **Manuel Mod**'a hem de daha önce
   - **Bileşen Kaldırma**: Internet Explorer ve Windows Media Player gibi eski bileşenleri kaldırın.
 - **Güvenilirlik ve Bağımlılık Yönetimi**:
   - Bir `trap` mekanizması, bir hata oluşması durumunda güvenli bir çıkış ve temizlik sağlayarak "kirli" bir durumu (örneğin, bağlanmış bir imaj) önler.
+  - Geçici dosyalar yalnızca `%TEMP%\WinISOUtil` altındaki işaretli ve araca ait çalışma alanından silinir.
+  - Hem `install.wim` hem de `install.esd` kaynak imajları desteklenir.
   - Betik, gerekli olan **Windows ADK**'yı otomatik olarak kontrol eder. Bulunmazsa, kullanıcıya kurulum için net talimatlar sağlar.
 
 ---
 
 ## 🚀 Hızlı Başlangıç
 
-Bu aracı kullanmak için bir **Terminal** veya **PowerShell** penceresi açın ve aşağıdaki komutu çalıştırın. Bu komut, kurulumu sizin için yöneten başlatıcı betiğini indirip çalıştıracaktır.
+İncelediğiniz bir sürüm arşivini indirin veya repoyu klonlayın, ardından betiği yerel dosyadan çalıştırın:
 
 ```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; irm https://raw.githubusercontent.com/yusufklncc/winisoutil/refs/heads/main/install.ps1 | iex
+git clone https://github.com/yusufklncc/winisoutil.git
+cd winisoutil
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\winisoutil.ps1
+```
+
+`winisoutil.ps1` dosyasını **yükseltilmiş bir PowerShell penceresinden**
+çalıştırın. Ana betik yönetici ayrıcalıklarını kontrol eder ve eksikse durur.
+İsteğe bağlı bootstrapper ise elevation isteğini otomatik olarak açar.
+
+Uzak betikleri doğrudan `iex` komutuna aktarmayın. Tekrarlanabilir bootstrap kurulumu için yerel `install.ps1` dosyasını sabitlenmiş Git ref ve beklenen arşiv SHA-256 değeriyle çalıştırın:
+
+```powershell
+.\install.ps1 -Ref '<etiket-veya-commit>' -ExpectedArchiveSha256 '<sha256>'
 ```
 
 ## ⚙️ Kullanım ve İş Akışı
 
 1.  Başlatıcı betik önce Yönetici ayrıcalıkları ister.
-2.  Gerekli tüm proje dosyalarını GitHub'dan geçici bir dizine indirir.
+2.  İsteğe bağlı bootstrapper kullanılırsa proje dosyalarını benzersiz bir geçici dizine indirir ve arşiv SHA-256 değerini doğrulayabilir.
 3.  Ana betik olan `winisoutil.ps1` başlatılır.
 4.  Bir dil seçmeniz istenecektir.
 5.  Betik, devam etmeden önce tüm gereksinimlerin (Windows ADK gibi) karşılandığını doğrular.
 6.  Düzenlemek istediğiniz Windows ISO dosyasını seçmeniz için bir dosya seçim penceresi açılır.
-7.  ISO bağlanır, içeriği `C:\temp_iso` konumuna kopyalanır ve `install.wim` içindeki imaj `C:\mount` konumuna bağlanır.
+7.  ISO bağlanır, içeriği `%TEMP%\WinISOUtil\iso` konumuna kopyalanır ve seçilen imaj `%TEMP%\WinISOUtil\mount` konumuna bağlanır.
 8.  Ana menü belirir ve istediğiniz özelleştirmelerle devam etmenize olanak tanır.
 
 ---
 
-## 🤖 JSON ile Otomatik Mod
+## 🤖 JSON ile Katılımsız Mod
 
 Her seferinde aynı seçenekleri manuel olarak seçmek yerine, bir yapılandırma dosyası kullanarak iş akışınızı kolaylaştırabilirsiniz.
 
@@ -66,7 +80,60 @@ Her seferinde aynı seçenekleri manuel olarak seçmek yerine, bir yapılandırm
 
 2.  **Ayarları İçe Aktarma**:
     - Betiği bir sonraki çalıştırdığınızda, bir ISO seçtikten sonra bir yapılandırma dosyası içe aktarmak isteyip istemediğiniz sorulacaktır.
-    - "Evet" (`E`) seçeneğini seçin ve kaydettiğiniz `.json` dosyasını belirtin. Betik, dosyada tanımlanan tüm ayarları otomatik olarak uygulayacaktır.
+    - "Evet" (`E`) seçeneğini seçin ve kaydettiğiniz `.json` dosyasını belirtin. Betik, dosyada tanımlanan ve doğrulamadan geçen ayarları otomatik olarak uygulayacaktır.
+
+3.  **Kullanıcı etkileşimi olmadan çalıştırma**:
+
+```powershell
+.\winisoutil.ps1 `
+  -Unattended `
+  -Language tr `
+  -IsoPath 'D:\ISO\Windows11.iso' `
+  -ConfigurationPath '.\config\desktop.json' `
+  -EditionIndex 1 `
+  -OutputIsoPath 'D:\ISO\out\Windows11-custom.iso'
+```
+
+Yeni export dosyaları yapılandırma şeması sürüm 2'yi ve kararlı
+`RemovedAppSelectors` değerlerini kullanır. Böylece aynı profil güncellenmiş ISO
+build'leri ve locale hedefleri arasında tekrar kullanılabilir. Sürüm 1 profilleri
+tek seferlik çalışmalar için okunmaya devam eder. Sıfır dokunuş otomasyonu sürüm
+2 profil zorunluluğu koyar. Profil yaşam döngüsü için
+[`docs/PROFILE.tr.md`](docs/PROFILE.tr.md) dosyasına bakın.
+
+### Katılımsız CLI Referansı
+
+| Parametre | Amaç |
+| --- | --- |
+| `-IsoPath` | Girdi Windows ISO dosyası. Katılımsız modda zorunludur. |
+| `-ConfigurationPath` | Export edilmiş JSON profilidir. Katılımsız modda zorunludur. |
+| `-OutputIsoPath` | Final ISO yoludur. Katılımsız modda zorunludur. |
+| `-EditionIndex` | Özelleştirilecek imaj indeksidir. ISO birden fazla edition içeriyorsa zorunludur. |
+| `-Language` | Araç mesaj dili: `tr` veya `en`. Katılımsız modda varsayılan `en` değeridir. |
+| `-UpdatesPath` | `.msu` güncelleme paketlerini içeren isteğe bağlı klasördür. |
+| `-DriversPath` | `.inf` sürücülerini içeren isteğe bağlı klasördür. Alt klasörler dahil edilir. |
+| `-WorkingDirectory` | İsteğe bağlı sahipli çalışma alanıdır. Varsayılan `%TEMP%\WinISOUtil` değeridir. |
+| `-SkipWimOptimization` | Final WIM export optimizasyonunu atlar. Yalnız teşhis amacıyla kullanılmalıdır. |
+
+## Zamanlanmış UUP Otomasyonu
+
+Önerilen sıfır dokunuş modeli GitHub Actions yerine dedicated bir Windows 11
+makine veya VM üzerinde çalışır. Günlük SYSTEM görevi uygun Retail UUP build'ini
+keşfeder, Microsoft CDN hostlarından hash doğrulamalı payload dosyalarını indirir,
+yapılandırılmış her locale için ayrı Windows 11 Pro ISO üretir, şema sürüm 2
+profilini uygular, sonucu doğrular ve belirlenen sayıda başarılı çıktıyı tutar.
+
+Kurulum ve işletim için [`docs/AUTOMATION.tr.md`](docs/AUTOMATION.tr.md)
+dosyasına bakın.
+
+## Dokümantasyon
+
+- [`docs/AUTOMATION.tr.md`](docs/AUTOMATION.tr.md): günlük çoklu locale UUP otomasyonu
+- [`docs/PROFILE.tr.md`](docs/PROFILE.tr.md): şema sürüm 2 profillerini oluşturma ve koruma
+- [`docs/TROUBLESHOOTING.tr.md`](docs/TROUBLESHOOTING.tr.md): kurtarma ve teşhis runbook'u
+- [`docs/TESTING.tr.md`](docs/TESTING.tr.md): fixture, canlı API ve Hyper-V doğrulaması
+- [`SECURITY.md`](SECURITY.md): güven sınırları ve tedarik zinciri politikası
+- [`CONTRIBUTING.md`](CONTRIBUTING.md): katkı ve branch akışı
 
 ---
 
@@ -91,17 +158,24 @@ Proje modüler olacak şekilde tasarlanmıştır. `src/` dizinindeki dosyaları 
 - **Windows ADK**: [Windows Değerlendirme ve Dağıtım Kiti (ADK)](https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install) kurulu olmalıdır.
   - ADK kurulumu sırasında, yalnızca son ISO dosyasını oluşturmak için gerekli olan `oscdimg.exe`'yi içeren **"Dağıtım Araçları"** özelliğini seçmeniz yeterlidir.
 
+## ✅ Doğrulama
+
+Değişiklik göndermeden önce yerel fixture kontrollerini çalıştırın:
+
+```powershell
+.\tests\Test-Static.ps1
+.\tests\Test-Automation.ps1
+```
+
+Canlı UUP API smoke testi ve Hyper-V kurulum testi
+[`docs/TESTING.tr.md`](docs/TESTING.tr.md) dosyasında belgelenmiştir.
+
 ---
 
 ## 🤝 Katkıda Bulunma
 
-Katkılarınız projeyi daha iyi hale getirir! Bir hata bulursanız, yeni bir özellik önermek veya kodu iyileştirmek isterseniz, lütfen bir "Issue" açın veya bir "Pull Request" gönderin.
-
-1.  Projeyi Fork'layın.
-2.  Yeni bir Özellik Dalı oluşturun (`git checkout -b feature/HarikaYeniOzellik`).
-3.  Değişikliklerinizi Commit'leyin (`git commit -m 'Harika bir yeni özellik ekle'`).
-4.  Dala Push'layın (`git push origin feature/HarikaYeniOzellik`).
-5.  Bir Pull Request açın.
+Geliştirme akışı için [`CONTRIBUTING.md`](CONTRIBUTING.md) dosyasını kullanın.
+Değişiklikler `dev` üzerinden entegre edilir; `main` release-ready branch'tir.
 
 ---
 
