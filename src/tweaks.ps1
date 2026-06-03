@@ -266,8 +266,13 @@ $allTweaks = @(
             Set-ItemProperty -Path 'Registry::HKU\TEMP\SOFTWARE\Microsoft\Windows\CurrentVersion\UserProfileEngagement' -Name 'ScoobeSystemSettingEnabled' -Value 0 -Type DWord -Force
             
             # Disables the Settings Banner feature that displays tips and suggestions in the Settings app. (Win 11 22000+)
-            Ensure-RegistryKey -Path 'Registry::HKLM\TEMP\Microsoft\WindowsRuntime\ActivatableClassId\ValueBanner.IdealStateFeatureControlProvider'
-            Set-ItemProperty -Path 'Registry::HKLM\TEMP\Microsoft\WindowsRuntime\ActivatableClassId\ValueBanner.IdealStateFeatureControlProvider' -Name 'ActivationType' -Value 0 -Type DWord -Force
+            try {
+                Ensure-RegistryKey -Path 'Registry::HKLM\TEMP\Microsoft\WindowsRuntime\ActivatableClassId\ValueBanner.IdealStateFeatureControlProvider'
+                Set-ItemProperty -Path 'Registry::HKLM\TEMP\Microsoft\WindowsRuntime\ActivatableClassId\ValueBanner.IdealStateFeatureControlProvider' -Name 'ActivationType' -Value 0 -Type DWord -Force
+            }
+            catch {
+                Write-Warning "Could not apply optional Settings Banner registry override: $($_.Exception.Message)"
+            }
             
             # Disables online tips in the Settings app, preventing Windows from displaying tips and suggestions sourced from online content.
             Ensure-RegistryKey -Path 'Registry::HKLM\TEMP\Microsoft\PolicyManager\default\Settings\AllowOnlineTips'
