@@ -4,6 +4,33 @@
 # The main script will fetch the description from the language file using a key like 'tweak_ID_desc'.
 # This file is part of the WinISOUtil project.
 
+function Ensure-RegistryKey {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    if (Test-Path -Path $Path) { return }
+
+    $prefix = ''
+    $body = $Path
+    if ($body.StartsWith('Registry::', [System.StringComparison]::OrdinalIgnoreCase)) {
+        $prefix = 'Registry::'
+        $body = $body.Substring($prefix.Length)
+    }
+
+    $segments = $body -split '\\'
+    if ($segments.Count -lt 2) { return }
+
+    $current = if ($prefix) { "$prefix$($segments[0])" } else { $segments[0] }
+    for ($i = 1; $i -lt $segments.Count; $i++) {
+        $current = "$current\$($segments[$i])"
+        if (-not (Test-Path -Path $current)) {
+            New-Item -Path $current -Force -ErrorAction Stop | Out-Null
+        }
+    }
+}
+
 $allTweaks = @(
     [PSCustomObject]@{ 
         ID = 'WU_NotifyDownload'; 
@@ -239,11 +266,11 @@ $allTweaks = @(
             Set-ItemProperty -Path 'Registry::HKU\TEMP\SOFTWARE\Microsoft\Windows\CurrentVersion\UserProfileEngagement' -Name 'ScoobeSystemSettingEnabled' -Value 0 -Type DWord -Force
             
             # Disables the Settings Banner feature that displays tips and suggestions in the Settings app. (Win 11 22000+)
-            New-Item -Path 'Registry::HKLM\TEMP\Microsoft\WindowsRuntime\ActivatableClassId\ValueBanner.IdealStateFeatureControlProvider' -Force -ErrorAction SilentlyContinue | Out-Null
+            Ensure-RegistryKey -Path 'Registry::HKLM\TEMP\Microsoft\WindowsRuntime\ActivatableClassId\ValueBanner.IdealStateFeatureControlProvider'
             Set-ItemProperty -Path 'Registry::HKLM\TEMP\Microsoft\WindowsRuntime\ActivatableClassId\ValueBanner.IdealStateFeatureControlProvider' -Name 'ActivationType' -Value 0 -Type DWord -Force
             
             # Disables online tips in the Settings app, preventing Windows from displaying tips and suggestions sourced from online content.
-            New-Item -Path 'Registry::HKLM\TEMP\Microsoft\PolicyManager\default\Settings\AllowOnlineTips' -Force -ErrorAction SilentlyContinue | Out-Null
+            Ensure-RegistryKey -Path 'Registry::HKLM\TEMP\Microsoft\PolicyManager\default\Settings\AllowOnlineTips'
             Set-ItemProperty -Path 'Registry::HKLM\TEMP\Microsoft\PolicyManager\default\Settings\AllowOnlineTips' -Name 'value' -Value 0 -Type DWord -Force
             # Disables online tips in File Explorer, preventing Windows from displaying tips and suggestions sourced from online content.
             New-Item -Path 'Registry::HKLM\TEMP\Policies\Microsoft\Windows\Explorer' -ErrorAction SilentlyContinue | Out-Null
